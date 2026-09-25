@@ -10,8 +10,8 @@ Les erreurs d'environnement (``OSError`` : disque plein, droits, fichier absent)
 erreurs attendues : le code n'y peut rien, le message suffit à corriger.
 
 ``run_cli`` applique cette distinction aux ``main()`` : code de sortie 0 si tout va bien,
-1 pour une ``QlabError`` ou une ``OSError``, 2 pour un bug. Chaque échec est écrit sur stderr
-et, si un journal est fourni, dans le journal JSONL.
+1 pour une ``QlabError`` ou une ``OSError``, 2 pour un bug, 130 pour Ctrl-C. Chaque échec
+est écrit sur stderr et, si un journal est fourni, dans le journal JSONL.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 EXIT_OK = 0
 EXIT_EXPECTED_ERROR = 1
 EXIT_BUG = 2
+EXIT_INTERRUPTED = 130  # convention Unix : 128 + SIGINT
 
 
 class QlabError(Exception):
@@ -46,10 +47,15 @@ def run_cli(entry: Callable[[], int], *, journal: JsonLog | None = None) -> int:
 
     ``entry`` renvoie son propre code en cas de succès. Une ``QlabError`` ou une ``OSError``
     donne 1 avec un message d'une ligne ; toute autre exception donne 2 avec la trace complète.
-    Les ``BaseException`` hors ``Exception`` (Ctrl-C, ``SystemExit``) ne sont pas interceptées.
+    Ctrl-C donne 130 avec « Interrompu » (sans trace) ; ``SystemExit`` n'est pas intercepté.
     """
     try:
         return entry()
+    except KeyboardInterrupt:
+        print("Interrompu (Ctrl-C).", file=sys.stderr)
+        if journal is not None:
+            journal.warning("run.interrupted")
+        return EXIT_INTERRUPTED
     except QlabError as exc:
         name = type(exc).__name__
         print(f"ERREUR ({name}) : {exc}", file=sys.stderr)

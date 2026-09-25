@@ -19,8 +19,9 @@ BASE: dict[str, object] = {
                 "taker_frac": 0.001,
                 "bnb_discount_frac": 0.25,
                 "pay_in_bnb": False,
-                "snapshot_refresh_hours": 24,
             },
+            "snapshot_refresh_hours": 24,
+            "max_clock_offset_ms": 500,
         }
     ],
     "archives": {

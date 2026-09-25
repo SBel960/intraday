@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from qlab.core.errors import DataError
+from qlab.core.jsonlog import read_log
 from qlab.core.ledger import Flow, Ledger, main, parse_amount
 
 T = 1_704_067_200_000  # 2024-01-01T00:00:00Z
@@ -97,8 +98,12 @@ def test_missing_ledger_is_empty(tmp_path: Path) -> None:
     assert not ledger.path.exists()
 
 
-def test_from_data_root(tmp_path: Path) -> None:
-    assert Ledger.from_data_root(tmp_path).path == tmp_path / "meta" / "ledger.jsonl"
+def test_cli_journals_recorded_flows(config_dir: Path, tmp_path: Path) -> None:
+    """Chaque dépôt passé par la commande est aussi tracé dans logs/ledger/."""
+    assert main(["--config", str(config_dir), "deposit", "50", "--date", "2024-01-01"]) == 0
+    logs = list((tmp_path / "data" / "logs" / "ledger").glob("*.jsonl"))
+    kinds = [r["kind"] for f in logs for r in read_log(f).records]
+    assert kinds == ["run.start", "flow.recorded"]
 
 
 def test_unicode_note(tmp_path: Path) -> None:

@@ -17,6 +17,7 @@ import dataclasses
 import itertools
 import json
 import math
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, fields, is_dataclass
 from decimal import Decimal
@@ -104,21 +105,19 @@ class FeesConfig:
     """Barème de repli, appliqué tant qu'aucun snapshot de frais réel n'est disponible.
 
     Frais en fraction du notional (0.001 = 0,1 %). ``bnb_discount_frac`` : remise appliquée
-    si les frais sont payés en BNB. ``snapshot_refresh_hours`` : période de relecture des frais
-    réels par ``exchange_info.py`` ; tout changement déclenche le recalcul des coûts.
+    si les frais sont payés en BNB. Ils sont enregistrés dans chaque snapshot ``exchangeInfo`` ;
+    un changement de barème crée une nouvelle version.
     """
 
     maker_frac: float
     taker_frac: float
     bnb_discount_frac: float
     pay_in_bnb: bool
-    snapshot_refresh_hours: int
 
     def __post_init__(self) -> None:
         for name in ("maker_frac", "taker_frac", "bnb_discount_frac"):
             x: float = getattr(self, name)
             _check(0 <= x < 1, f"{name} doit être dans [0, 1[ (reçu {x})")
-        _positive("snapshot_refresh_hours", self.snapshot_refresh_hours)
 
     @property
     def effective_maker_frac(self) -> float:
@@ -137,14 +136,26 @@ class FeesConfig:
 
 @dataclass(frozen=True, slots=True)
 class ExchangeConfig:
+    """Un échange. ``snapshot_refresh_hours`` : âge au-delà duquel ``exchange_info fetch
+    --if-due`` reprend un snapshot. ``max_clock_offset_ms`` : écart toléré entre l'horloge
+    locale et celle du serveur ; au-delà, alerte (journal, puis refus des modules sensibles)."""
+
     name: str
     rest_url: str
     ws_url: str
     fees: FeesConfig
+    snapshot_refresh_hours: int
+    max_clock_offset_ms: int
 
     def __post_init__(self) -> None:
+        _check(
+            bool(re.match(r"^[a-z0-9_]+$", self.name)),
+            f"name doit être en [a-z0-9_]+ (sert de dossier) : {self.name!r}",
+        )
         _url("rest_url", self.rest_url, "https")
         _url("ws_url", self.ws_url, "wss")
+        _positive("snapshot_refresh_hours", self.snapshot_refresh_hours)
+        _positive("max_clock_offset_ms", self.max_clock_offset_ms)
 
 
 @dataclass(frozen=True, slots=True)

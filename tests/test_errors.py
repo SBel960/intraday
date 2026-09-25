@@ -10,6 +10,7 @@ from qlab.core.config import ConfigError
 from qlab.core.errors import (
     EXIT_BUG,
     EXIT_EXPECTED_ERROR,
+    EXIT_INTERRUPTED,
     EXIT_OK,
     DataError,
     ExchangeError,
@@ -63,10 +64,19 @@ def test_bug(capsys: pytest.CaptureFixture[str]) -> None:
     assert "Traceback (most recent call last)" in err  # trace complète, rien de masqué
 
 
-@pytest.mark.parametrize("exc", [KeyboardInterrupt(), SystemExit(5)])
-def test_base_exceptions_not_intercepted(exc: BaseException) -> None:
-    with pytest.raises(type(exc)):
-        run_cli(lambda: _raise(exc))
+def test_system_exit_not_intercepted() -> None:
+    with pytest.raises(SystemExit):
+        run_cli(lambda: _raise(SystemExit(5)))
+
+
+def test_ctrl_c(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Ctrl-C : code 130, message court, pas de trace ; journalisé en avertissement."""
+    with JsonLog(tmp_path, "cli", clock_ms=lambda: T) as journal:
+        assert run_cli(lambda: _raise(KeyboardInterrupt()), journal=journal) == EXIT_INTERRUPTED
+    err = capsys.readouterr().err
+    assert err == "Interrompu (Ctrl-C).\n"
+    record = read_log(tmp_path / "cli" / "2024-01-01.jsonl").records[0]
+    assert (record["level"], record["kind"]) == ("warning", "run.interrupted")
 
 
 # --- journalisation ----------------------------------------------------------------------

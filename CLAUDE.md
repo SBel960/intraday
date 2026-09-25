@@ -9,6 +9,10 @@
 - Les données vont sur le système de fichiers Linux de WSL2, **jamais sous `/mnt/c`**. La racine est fixée dans `config/base.yaml`.
 - Clés API : aucune n'est nécessaire pour la recherche ni pour le paper trading. Si un jour il en faut, elles doivent être **sans droit de retrait**, rangées dans un `.env` hors dépôt (dans `.gitignore`), et ne sont jamais affichées ni commitées.
 
+## Architecture
+
+Avant d'écrire un module, relire « Règles d'architecture » dans `docs/ARBORESCENCE.md` : chemins par `core/paths.py`, réseau par `core/http.py`, commandes par `core/cli.py`, erreurs par `core/errors.py`, temps en entiers (`core/timeutils.py`), argent en `Decimal`. Un besoin transversal nouveau ⇒ un module du socle, pas une copie.
+
 ## Protocole de travail
 
 - Spécifications : `docs/SPEC_INTRADAY.md` et `docs/SPEC_LONG_TERME.md`.

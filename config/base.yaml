@@ -17,7 +17,8 @@ exchanges:
       taker_frac: 0.001
       bnb_discount_frac: 0.25          # remise si les frais sont payés en BNB
       pay_in_bnb: false
-      snapshot_refresh_hours: 24
+    snapshot_refresh_hours: 24         # exchange_info fetch --if-due : nouveau snapshot si plus vieux
+    max_clock_offset_ms: 500           # écart d'horloge local / serveur toléré (mesuré à chaque fetch)
 
 archives:
   binance_vision_url: https://data.binance.vision

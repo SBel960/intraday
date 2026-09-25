@@ -1,4 +1,4 @@
-"""Registre append-only des apports et retraits : ``$DATA_ROOT/meta/ledger.jsonl``.
+"""Registre append-only des apports et retraits : ``DataPaths.ledger`` (``meta/ledger.jsonl``).
 
 Sert à trois choses :
 - le **capital apporté** (dépôts − retraits), qui fixe le palier (``BaseConfig.tier_for``) ;
@@ -33,13 +33,12 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Literal, cast
 
-from qlab.core.config import load_config
-from qlab.core.errors import DataError, run_cli
+from qlab.core.cli import Context, run_command
+from qlab.core.errors import DataError
 from qlab.core.timeutils import date_to_ms, ms_to_iso, now_ms
 
 FlowKind = Literal["deposit", "withdrawal"]
 KINDS: tuple[FlowKind, ...] = ("deposit", "withdrawal")
-LEDGER_RELPATH = Path("meta") / "ledger.jsonl"  # sous la racine des données de la config
 _FIELDS = frozenset({"ts_ms", "kind", "amount_quote", "note", "amount_fiat", "fiat"})
 _FIAT_RE = re.compile(r"^[A-Z]{3}$")  # code ISO 4217
 
@@ -159,10 +158,6 @@ class Ledger:
     def __init__(self, path: Path) -> None:
         self.path = path
 
-    @classmethod
-    def from_data_root(cls, data_root: Path) -> Ledger:
-        return cls(data_root / LEDGER_RELPATH)
-
     def flows(self) -> tuple[Flow, ...]:
         """Tous les flux, validés, dans l'ordre du fichier ; ``()`` si le registre n'existe pas."""
         if not self.path.exists():
@@ -222,12 +217,8 @@ class Ledger:
 # --- commande ----------------------------------------------------------------------------
 
 
-def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
-        prog="python -m qlab.core.ledger", description=__doc__.split("\n")[0]
-    )
-    p.add_argument("--config", type=Path, required=True, help="dossier des YAML")
-    sub = p.add_subparsers(dest="action", required=True)
+def _add_arguments(parser: argparse.ArgumentParser) -> None:
+    sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("show", help="liste les flux, le capital apporté et le palier")
     for kind in KINDS:
         s = sub.add_parser(kind, help=f"enregistre un {kind} (montant en devise de cotation)")
@@ -236,43 +227,60 @@ def _parser() -> argparse.ArgumentParser:
         s.add_argument("--note", default="", help="commentaire sur une ligne")
         s.add_argument("--fiat-amount", help="montant réellement versé en fiat, ex. 50.00")
         s.add_argument("--fiat", help="code ISO de la monnaie fiat, ex. EUR (avec --fiat-amount)")
-    return p
+
+
+def _record(ctx: Context, ledger: Ledger) -> None:
+    args = ctx.args
+    try:
+        ts_ms = date_to_ms(args.date) if args.date else now_ms()
+    except ValueError as exc:
+        raise DataError(str(exc)) from exc
+    if (args.fiat_amount is None) != (args.fiat is None):
+        raise DataError("--fiat-amount et --fiat vont ensemble : les deux ou aucun")
+    fiat_amount = None if args.fiat_amount is None else parse_amount(args.fiat_amount)
+    flow = Flow(
+        ts_ms,
+        cast(FlowKind, args.action),
+        parse_amount(args.amount),
+        args.note,
+        fiat_amount,
+        args.fiat,
+    )
+    ledger.append(flow)
+    ctx.journal.info(
+        "flow.recorded",
+        {"ts_ms": flow.ts_ms, "kind": flow.kind, "amount_quote": format_amount(flow.amount_quote)},
+    )
+
+
+def _action(ctx: Context) -> int:
+    base = ctx.config.base
+    ledger = Ledger(ctx.paths.ledger)
+    quote = base.symbols.quote_asset
+    if ctx.args.action != "show":
+        _record(ctx, ledger)
+    for f in ledger.flows():
+        fiat = "" if f.amount_fiat is None else f" ({format_amount(f.amount_fiat)} {f.fiat})"
+        print(f"{ms_to_iso(f.ts_ms)}  {f.kind:<10} {f.signed_quote:>+14f} {quote}{fiat}  {f.note}")
+    net = ledger.net_deposits_quote()
+    print(f"Capital apporté : {format_amount(net)} {quote}")
+    if net > 0:
+        tier = base.tier_for(net)
+        print(f"Palier : {tier.name} (drawdown max {tier.max_drawdown_frac:.0%})")
+    else:
+        print("Palier : aucun (capital apporté ≤ 0)")
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
-
-    def run() -> int:
-        cfg = load_config(args.config).base
-        ledger = Ledger.from_data_root(cfg.data.root)
-        quote = cfg.symbols.quote_asset
-        if args.action != "show":
-            try:
-                ts_ms = date_to_ms(args.date) if args.date else now_ms()
-            except ValueError as exc:
-                raise DataError(str(exc)) from exc
-            if (args.fiat_amount is None) != (args.fiat is None):
-                raise DataError("--fiat-amount et --fiat vont ensemble : les deux ou aucun")
-            fiat_amount = None if args.fiat_amount is None else parse_amount(args.fiat_amount)
-            kind = cast(FlowKind, args.action)
-            ledger.append(
-                Flow(ts_ms, kind, parse_amount(args.amount), args.note, fiat_amount, args.fiat)
-            )
-        for f in ledger.flows():
-            fiat = "" if f.amount_fiat is None else f" ({format_amount(f.amount_fiat)} {f.fiat})"
-            print(
-                f"{ms_to_iso(f.ts_ms)}  {f.kind:<10} {f.signed_quote:>+14f} {quote}{fiat}  {f.note}"
-            )
-        net = ledger.net_deposits_quote()
-        print(f"Capital apporté : {format_amount(net)} {quote}")
-        if net > 0:
-            tier = cfg.tier_for(net)
-            print(f"Palier : {tier.name} (drawdown max {tier.max_drawdown_frac:.0%})")
-        else:
-            print("Palier : aucun (capital apporté ≤ 0)")
-        return 0
-
-    return run_cli(run)
+    return run_command(
+        argv,
+        prog="python -m qlab.core.ledger",
+        description="Registre des apports / retraits",
+        component="ledger",
+        add_arguments=_add_arguments,
+        action=_action,
+    )
 
 
 if __name__ == "__main__":

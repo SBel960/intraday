@@ -1,0 +1,11 @@
+# Snapshot exchangeInfo si le dernier a plus de snapshot_refresh_hours (base.yaml).
+# Lancé par qlab-exchange-info.timer ; installation : voir ops/README.md.
+[Unit]
+Description=qlab : snapshot exchangeInfo (si dû)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/intraday
+ExecStart=%h/.venvs/qlab/bin/python -m qlab.exchange.exchange_info --config config fetch --if-due
