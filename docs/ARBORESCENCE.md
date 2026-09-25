@@ -14,7 +14,7 @@ Chaque besoin transversal a **un seul endroit** ; un nouveau module s'y branche 
 | Commande `python -m` | `core/cli.py` (`run_command` : config, chemins, journal, codes de sortie) | `argparse` + `load_config` + `run_cli` recopiés (seule exception : `config.py`) |
 | Erreurs et codes de sortie | `core/errors.py` (`QlabError`, `run_cli`) | `except Exception` hors `run_cli`, `sys.exit` dans le code métier |
 | Temps | `core/timeutils.py` (entiers ms / µs) | `datetime` pour stocker ou calculer des horodatages |
-| Montants, prix, quantités | `core/money.py` (`Decimal`) ; filtres de lot dans `exchange/lot.py` | flottants pour de l'argent |
+| Montants, prix, quantités | `core/money.py` (`Decimal`) ; filtres de lot dans `exchange/lot.py` | flottants pour de l'argent ; *exception documentée* : fractions statistiques (distributions de coûts, rendements) en `float64` numpy dans `costs/`, `research/`, `longterm/` |
 | Écriture de fichiers | `core/files.py` (`write_atomic`) | `tempfile` + `os.replace` recopiés |
 | Journal | `core/jsonlog.py` via `Context.journal` | `print` comme seule trace d'un événement important |
 | Valeurs métier | `config/*.yaml` via `core/config.py` | seuils, frais, symboles ou chemins en dur |
@@ -66,7 +66,7 @@ intraday/
 │   │   ├── effective_params.py    recalcul à chaque appel : palier (capital apporté), frais du snapshot en vigueur, limites en devise et δ_min (valeur du portefeuille), alertes
 │   │   └── lot.py                 arrondi prix → tickSize, quantité → stepSize (Decimal), rejet sous minNotional
 │   ├── costs/
-│   │   ├── cost_model.py          c_taker, c_maker, p*, drag annuel (§5)
+│   │   ├── cost_model.py          formules pures vectorisées (fractions float64) : s̃, c_taker, c_maker, coût d'un ordre, p*, drag, coût de rééquilibrage (§5, LT.4)
 │   │   └── cost_gate.py           LE GATE : distribution de c, mouvement médian par horizon, ratio, horizon min > 3
 │   ├── data/
 │   │   ├── cursor.py              curseur persistant et atomique (reprise après crash, ni trou ni doublon)
@@ -169,7 +169,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 15 | 0 · Socle | `exchange/effective_params.py` | validé |
 | 16 | 0 · Données réelles | `data/binance_vision.py` | validé |
 | 17 | 0 · Données réelles | `data/archives.py` | validé |
-| 18 | 1 · Gate | `costs/cost_model.py` | à faire |
+| 18 | 1 · Gate | `costs/cost_model.py` | validé |
 | 19 | 1 · Gate | `costs/cost_gate.py` | à faire |
 | — | 1 · Gate | **Cost gate v1 sur données réelles** : aggTrades (archives Binance) + book_ticker (jours gratuits Tardis.dev) | à faire |
 | 20 | 2 · Recherche | `research/hypothesis.py` (+ `hypotheses/_template.yaml`) | à faire |
