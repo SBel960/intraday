@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -62,7 +63,9 @@ def test_repo_config_is_valid() -> None:
     """Les YAML du dépôt sont chargeables tels quels."""
     cfg = load_config(REPO_CONFIG)
     assert cfg.intraday.gate.horizons_s == (5, 30, 60, 300, 900)
-    assert cfg.base.symbols.intraday == ("BTCUSDT", "ETHUSDT")
+    assert cfg.base.symbols.quote_asset == "EUR"  # compte EEE (MiCA)
+    assert cfg.base.symbols.intraday == ("BTCEUR", "ETHEUR")
+    assert cfg.longterm.costs.eur_conversion_cost_frac == 0.0
 
 
 def test_deterministic(config_dir: Path) -> None:
@@ -269,8 +272,9 @@ def test_longterm_domain(config_dir: Path, keys: list[str | int], value: Any, ms
 
 def test_main_reports_error(config_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
     _edit(config_dir / "base.yaml", ["data", "root"], "/mnt/c/x")
-    assert main(["--config", str(config_dir)]) == 1
-    assert "ERREUR de configuration" in capsys.readouterr().out
+    assert main(["--config", str(config_dir)]) == 1  # erreur attendue, pas un bug (2)
+    err = capsys.readouterr().err
+    assert err.startswith("ERREUR (ConfigError) : base.data : root ne doit pas être sous /mnt")
 
 
 # --- recalcul : frais effectifs et palier selon le capital -------------------------------
@@ -293,15 +297,16 @@ def test_fee_change_is_picked_up(config_dir: Path) -> None:
 @pytest.mark.parametrize(
     ("net_deposits", "tier"),
     [
-        (30.0, "t0"),  # apport sous le premier seuil : premier palier
-        (50.0, "t0"),  # seuil exact
-        (199.99, "t0"),
-        (200.0, "t1"),
-        (10_000.0, "t1"),  # au-delà du dernier seuil : dernier palier
+        ("30", "t0"),  # apport sous le premier seuil : premier palier
+        ("50", "t0"),  # seuil exact
+        ("199.99", "t0"),
+        ("199.999999999999999999", "t0"),  # juste sous 200 : aucun arrondi flottant
+        ("200", "t1"),
+        ("10000", "t1"),  # au-delà du dernier seuil : dernier palier
     ],
 )
-def test_tier_for_net_deposits(config_dir: Path, net_deposits: float, tier: str) -> None:
-    assert load_base(config_dir / "base.yaml").tier_for(net_deposits).name == tier
+def test_tier_for_net_deposits(config_dir: Path, net_deposits: str, tier: str) -> None:
+    assert load_base(config_dir / "base.yaml").tier_for(Decimal(net_deposits)).name == tier
 
 
 def test_tier_is_not_relaxed_by_losses(config_dir: Path) -> None:
@@ -310,12 +315,19 @@ def test_tier_is_not_relaxed_by_losses(config_dir: Path) -> None:
     Le palier ne prend que l'apport en argument ; la valeur de marché ne peut pas l'influencer.
     """
     base = load_base(config_dir / "base.yaml")
-    tier = base.tier_for(net_deposits_quote=200.0)
+    tier = base.tier_for(net_deposits_quote=Decimal("200"))
     assert tier.name == "t1"
     assert tier.max_drawdown_frac == 0.25
 
 
-@pytest.mark.parametrize("net_deposits", [0.0, -5.0, float("nan"), float("inf")])
-def test_tier_for_invalid_deposits(config_dir: Path, net_deposits: float) -> None:
+@pytest.mark.parametrize("net_deposits", ["0", "-5", "NaN", "Infinity"])
+def test_tier_for_invalid_deposits(config_dir: Path, net_deposits: str) -> None:
     with pytest.raises(ConfigError, match="net_deposits_quote doit être > 0"):
-        load_base(config_dir / "base.yaml").tier_for(net_deposits)
+        load_base(config_dir / "base.yaml").tier_for(Decimal(net_deposits))
+
+
+@pytest.mark.parametrize("net_deposits", [200.0, 200])
+def test_tier_for_rejects_non_decimal(config_dir: Path, net_deposits: object) -> None:
+    """Pas de flottant pour de l'argent : on refuse au lieu de convertir en silence."""
+    with pytest.raises(ConfigError, match="doit être un Decimal"):
+        load_base(config_dir / "base.yaml").tier_for(net_deposits)  # type: ignore[arg-type]

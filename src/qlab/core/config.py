@@ -19,12 +19,13 @@ import json
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, fields, is_dataclass
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, get_args, get_origin, get_type_hints
 
 import yaml
 
-from qlab.core.errors import QlabError
+from qlab.core.errors import QlabError, run_cli
 
 BASE_FILE = "base.yaml"
 INTRADAY_FILE = "intraday.yaml"
@@ -218,7 +219,7 @@ class BaseConfig:
                 return ex
         raise ConfigError(f"échange non configuré : {name!r}")
 
-    def tier_for(self, net_deposits_quote: float) -> CapitalTier:
+    def tier_for(self, net_deposits_quote: Decimal) -> CapitalTier:
         """Palier applicable au capital apporté (dépôts − retraits, en devise de cotation).
 
         Le palier ne dépend jamais de la valeur de marché du portefeuille : sinon une perte
@@ -228,10 +229,15 @@ class BaseConfig:
         switch (drawdown mesuré depuis le plus haut), pas par un changement de palier.
 
         Retourne le plus haut palier dont le seuil est ≤ ``net_deposits_quote`` ; sous le
-        premier seuil, le premier palier.
+        premier seuil, le premier palier. Montant en ``Decimal`` (argent, cf. ``ledger.py``) ;
+        la comparaison ``Decimal`` / ``float`` de Python est exacte.
         """
         _check(
-            math.isfinite(net_deposits_quote) and net_deposits_quote > 0,
+            isinstance(net_deposits_quote, Decimal),
+            f"net_deposits_quote doit être un Decimal (reçu {net_deposits_quote!r})",
+        )
+        _check(
+            net_deposits_quote.is_finite() and net_deposits_quote > 0,
             f"net_deposits_quote doit être > 0 et fini (reçu {net_deposits_quote})",
         )
         eligible = [t for t in self.capital_tiers if t.capital_quote <= net_deposits_quote]
@@ -498,13 +504,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=main.__doc__)
     parser.add_argument("--config", type=Path, required=True, help="dossier des YAML")
     args = parser.parse_args(argv)
-    try:
+
+    def run() -> int:
         cfg = load_config(args.config)
-    except ConfigError as exc:
-        print(f"ERREUR de configuration : {exc}")
-        return 1
-    print(json.dumps(dataclasses.asdict(cfg), indent=2, default=str, ensure_ascii=False))
-    return 0
+        print(json.dumps(dataclasses.asdict(cfg), indent=2, default=str, ensure_ascii=False))
+        return 0
+
+    return run_cli(run)
 
 
 if __name__ == "__main__":

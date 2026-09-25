@@ -24,15 +24,16 @@ archives:
   tardis_url: https://datasets.tardis.dev
 
 symbols:
-  quote_asset: USDT
-  intraday: [BTCUSDT, ETHUSDT]
+  # EUR : compte dans l'EEE (MiCA, USDT indisponible) ; pas de conversion EUR → stablecoin.
+  quote_asset: EUR
+  intraday: [BTCEUR, ETHEUR]
 
 risk:
   max_daily_loss_frac: 0.05          # du capital du palier
   max_open_positions: 1
   max_order_frac: 1.0                # taille max d'un ordre, en fraction du capital
 
-# Paliers de capital, en devise de cotation, strictement croissants.
+# Paliers de capital, en devise de cotation (EUR), strictement croissants.
 # Seuils sur le capital APPORTÉ (dépôts − retraits), jamais sur la valeur du portefeuille :
 # on monte de palier en déposant, et une perte ne fait jamais redescendre de palier.
 capital_tiers:

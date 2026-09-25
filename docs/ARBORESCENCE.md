@@ -10,6 +10,7 @@ Colonne « Statut » : `à faire` → `livré` → `validé` (ou `à revalider`)
 ```
 intraday/
 ├── pyproject.toml                 dépendances, config pytest / mypy --strict / ruff
+├── .github/workflows/ci.yml       CI : ruff, mypy --strict, pytest à chaque push
 ├── README.md                      installation (WSL2, données hors /mnt/c), commandes, état d'avancement
 ├── docs/
 │   ├── SPEC_INTRADAY.md           spécification d'origine (référence)
@@ -115,7 +116,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 3 | 0 · Socle | `core/jsonlog.py` | validé |
 | 3 bis | 0 · Socle | `core/errors.py` | validé |
 | 4 | 0 · Socle | `core/hashing.py` | validé |
-| 5 | 0 · Socle | `core/ledger.py` | à faire |
+| 5 | 0 · Socle | `core/ledger.py` | validé |
 | 6 | 0 · Socle | `exchange/lot.py` | à faire |
 | 7 | 0 · Socle | `exchange/exchange_info.py` | à faire |
 | 8 | 0 · Socle | `exchange/effective_params.py` | à faire |
