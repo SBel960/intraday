@@ -15,7 +15,8 @@ intraday/
 ├── docs/
 │   ├── SPEC_INTRADAY.md           spécification d'origine (référence)
 │   ├── SPEC_LONG_TERME.md         addendum long terme
-│   └── ARBORESCENCE.md            ce fichier + statut de validation par fichier
+│   ├── ARBORESCENCE.md            ce fichier + statut de validation par fichier
+│   └── SPEC_EVENEMENTS.md         (à écrire en début de phase 9) règles des informations hors marché
 ├── config/
 │   ├── base.yaml                  racine des données, budget disque, sources, symboles, limites de risque, paliers de capital
 │   ├── intraday.yaml              horizons du gate, latences, fenêtres de features, seuils (fraîcheur, ratio 3)
@@ -71,9 +72,13 @@ intraday/
 │   │   ├── engine.py              boucle événementielle, portefeuille, frais, arrondis, journal
 │   │   └── leakage.py             test anti-fuite (features décalées de +1 événement)
 │   ├── live/
-│   │   ├── risk.py                limites, kill switch (fraîcheur, perte journalière, drawdown par palier)
+│   │   ├── risk.py                limites, kill switch (fraîcheur, perte journalière, drawdown par palier) ; accepte dès le départ des drapeaux de risque externes (phase 9)
 │   │   ├── broker.py              interface d'ordres ; live impossible sans flag explicite + clé sans retrait vérifiée
 │   │   └── paper.py               paper trading sur flux live, journal complet de chaque décision
+│   ├── events/                    phase 9 : informations hors marché (annonces, calendrier, actualité)
+│   │   ├── calendar.py            événements programmés (Fed, inflation US…) : fenêtres sans nouvelle position
+│   │   ├── news.py                collecte d'annonces (Binance, GDELT…), horodatées à la RÉCEPTION, RAW append-only
+│   │   └── classify.py            classement des annonces → drapeaux de risque ; modèle et prompt versionnés
 │   └── longterm/
 │       ├── klines.py              bougies 1d / 1h → Bronze, contrôle qualité, trous marqués
 │       ├── universe.py            univers point-in-time (listing, délisting, chauffe) sans biais du survivant
@@ -94,6 +99,7 @@ $DATA_ROOT/
 ├── raw/{source}/{stream}/{symbol}/date=YYYY-MM-DD/HH.jsonl.zst      append-only, jamais modifié
 ├── bronze/{source}/{stream}/{symbol}/date=YYYY-MM-DD/*.parquet      ZSTD, dédupliqué, idempotent
 ├── silver/{features|bars|labels}/{symbol}/date=YYYY-MM-DD/*.parquet features dérivées uniquement
+├── events/{calendar|news|flags}/date=YYYY-MM-DD/*                   phase 9 : événements horodatés à la réception
 ├── lt/{klines_1d|klines_1h}/{symbol}.parquet                          long terme (< 1 Go)
 ├── meta/
 │   ├── exchange_info/{source}/{YYYYMMDDTHHMMSSZ}.json                 snapshots versionnés
@@ -117,7 +123,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 3 bis | 0 · Socle | `core/errors.py` | validé |
 | 4 | 0 · Socle | `core/hashing.py` | validé |
 | 5 | 0 · Socle | `core/ledger.py` | validé |
-| 6 | 0 · Socle | `exchange/lot.py` | à faire |
+| 6 | 0 · Socle | `exchange/lot.py` | validé |
 | 7 | 0 · Socle | `exchange/exchange_info.py` | à faire |
 | 8 | 0 · Socle | `exchange/effective_params.py` | à faire |
 | 9 | 0 · Données réelles | `data/archives.py` | à faire |
@@ -141,6 +147,20 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 26 | 4 · Paper LT | `live/risk.py` | à faire |
 | 27 | 4 · Paper LT | `live/broker.py` | à faire |
 | 28 | 4 · Paper LT | `live/paper.py` | à faire |
+
+**Phase 9 — Événements (informations hors marché), après le paper LT.** Décidée le 2026-09-25 : le projet ne regarde aujourd'hui que des chiffres de marché ; un tweet, une annonce de la Fed ou un piratage n'entrent dans aucun calcul, et le kill switch ne voit que leurs conséquences sur les prix. Usage prévu d'abord pour le **risque** (ne pas être exposé au mauvais moment), et seulement ensuite, éventuellement, comme signal (fiche d'hypothèse, essai compté dans le DSR, cost gate). Règles à respecter :
+
+1. Horodater à la **réception** (`received_ms`), pas à la publication : sinon le backtest sait avant d'avoir pu apprendre.
+2. Un modèle de langage qui juge une annonce **passée** connaît déjà la suite : fuite d'information. On n'évalue qu'en conditions réelles (paper), ou avec un modèle dont les connaissances s'arrêtent avant la période testée. Modèle et prompt versionnés et journalisés.
+3. Sources d'abord gratuites (calendriers économiques, annonces Binance, GDELT) ; l'API X est très chère.
+4. `live/risk.py` (étape 26) accepte dès sa livraison des drapeaux de risque externes, pour que la phase 9 se branche sans modifier un fichier validé.
+
+| # | Phase | Fichier | Statut |
+|---|---|---|---|
+| 48 | 9 · Événements | `docs/SPEC_EVENEMENTS.md` (spécification, à valider avant le code) | à faire |
+| 49 | 9 · Événements | `events/calendar.py` | à faire |
+| 50 | 9 · Événements | `events/news.py` | à faire |
+| 51 | 9 · Événements | `events/classify.py` | à faire |
 
 **Volet intraday — conditionnel.** Il ne démarre que si le cost gate v1 trouve un horizon intraday franchissable (par exemple grâce à un palier de frais plus bas ou à l'exécution maker). Sinon, il reste en attente et le rapport du gate le dit.
 
