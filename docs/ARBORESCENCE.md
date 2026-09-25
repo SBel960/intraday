@@ -114,7 +114,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 2 | 0 · Socle | `core/timeutils.py` | validé |
 | 3 | 0 · Socle | `core/jsonlog.py` | validé |
 | 3 bis | 0 · Socle | `core/errors.py` | validé |
-| 4 | 0 · Socle | `core/hashing.py` | à faire |
+| 4 | 0 · Socle | `core/hashing.py` | validé |
 | 5 | 0 · Socle | `core/ledger.py` | à faire |
 | 6 | 0 · Socle | `exchange/lot.py` | à faire |
 | 7 | 0 · Socle | `exchange/exchange_info.py` | à faire |
