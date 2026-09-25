@@ -13,6 +13,12 @@
 
 Avant d'écrire un module, relire « Règles d'architecture » dans `docs/ARBORESCENCE.md` : chemins par `core/paths.py`, réseau par `core/http.py`, commandes par `core/cli.py`, erreurs par `core/errors.py`, temps en entiers (`core/timeutils.py`), argent en `Decimal`. Un besoin transversal nouveau ⇒ un module du socle, pas une copie.
 
+**Vérification anti-spaghetti, à chaque modification (demande du propriétaire) :**
+
+1. *Avant* : relire les règles et chercher si le besoin existe déjà dans le socle (le réutiliser ou l'y ajouter, jamais le recopier).
+2. *Après* : `pytest tests/test_architecture.py` (couches, réseau, commandes, chemins, `except`, `sys.exit`, taille ≤ 300 lignes, un test par module, présence dans l'arborescence) — il tourne aussi en CI.
+3. *Revue du diff* : duplication, fonction qui fait deux choses, astuce opaque (sentinelle, drapeau caché), docstring ou `ARBORESCENCE.md` devenus faux. Signaler ce qui a été trouvé dans le rapport de livraison.
+
 ## Protocole de travail
 
 - Spécifications : `docs/SPEC_INTRADAY.md` et `docs/SPEC_LONG_TERME.md`.

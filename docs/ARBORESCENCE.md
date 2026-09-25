@@ -18,6 +18,8 @@ Chaque besoin transversal a **un seul endroit** ; un nouveau module s'y branche 
 | Journal | `core/jsonlog.py` via `Context.journal` | `print` comme seule trace d'un événement important |
 | Valeurs métier | `config/*.yaml` via `core/config.py` | seuils, frais, symboles ou chemins en dur |
 
+Ces règles sont **vérifiées automatiquement** par `tests/test_architecture.py` (en local et en CI) : un module qui les enfreint fait échouer les tests.
+
 Dépendances : `core` ne dépend d'aucun autre paquet de `qlab` ; `exchange` dépend de `core` ; les paquets suivants dépendent de `core` et `exchange`, jamais l'inverse. Un module qui dépasse ~300 lignes ou mélange deux responsabilités (ex. réseau + stockage) est découpé.
 
 Colonne « Statut » : `à faire` → `livré` → `validé` (ou `à revalider`).
