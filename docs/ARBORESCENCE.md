@@ -1,4 +1,4 @@
-# Arborescence proposée — EN ATTENTE DE VALIDATION
+# Arborescence — validée le 2026-09-25
 
 Package Python : `qlab`, avec un volet intraday et un volet long terme qui partagent le socle.
 Chaque module exécutable expose un `main()` lancé par `python -m qlab.<module> --config ...`. Il n'y a pas de CLI centrale, car elle obligerait à revalider un fichier déjà validé à chaque étape.
@@ -26,9 +26,11 @@ intraday/
 │   │   ├── config.py              chargement YAML → dataclasses figées et validées ; erreur si une clé manque
 │   │   ├── timeutils.py           entiers UTC ms/µs, tranche 5 min, jour de semaine, conversions sans flottant
 │   │   ├── jsonlog.py             journal structuré JSONL (événements, décisions, erreurs)
-│   │   └── hashing.py             hash déterministe de fichiers et de tables Parquet (tests d'idempotence)
+│   │   ├── hashing.py             hash déterministe de fichiers et de tables Parquet (tests d'idempotence)
+│   │   └── ledger.py              registre append-only des apports / retraits → capital apporté (palier), flux TWR / MWR
 │   ├── exchange/
-│   │   ├── exchange_info.py       récupère exchangeInfo (Binance / Bybit) et le barème de frais, stocke des snapshots versionnés
+│   │   ├── exchange_info.py       récupère exchangeInfo (Binance) et les frais réels du compte, stocke des snapshots versionnés
+│   │   ├── effective_params.py    recalcul à chaque appel : palier, frais effectifs (snapshot ou repli), limites en devise, δ_min
 │   │   └── lot.py                 arrondi prix → tickSize, quantité → stepSize (Decimal), rejet sous minNotional
 │   ├── costs/
 │   │   ├── cost_model.py          c_taker, c_maker, p*, drag annuel (§5)
@@ -36,7 +38,7 @@ intraday/
 │   ├── data/
 │   │   ├── cursor.py              curseur persistant et atomique (reprise après crash, ni trou ni doublon)
 │   │   ├── raw_writer.py          RAW JSONL.zst append-only, écriture par lots, rotation horaire
-│   │   ├── collector.py           websockets aggTrade + bookTicker, reconnexion, horodatage de réception
+│   │   ├── collector.py           websockets aggTrade + bookTicker, reconnexion, horodatage de réception, contrôle de l'écart d'horloge vs serveur
 │   │   ├── bronze.py              RAW → Bronze Parquet ZSTD, dédup sur (source, symbol, ts, seq), idempotent
 │   │   ├── gaps.py                détection des trous (seq et temps), table des trous, jamais d'interpolation
 │   │   ├── archives.py            téléchargement data.binance.vision (aggTrades, klines) + Tardis.dev (book_ticker), checksum
@@ -94,6 +96,7 @@ $DATA_ROOT/
 ├── meta/
 │   ├── exchange_info/{source}/{YYYYMMDDTHHMMSSZ}.json                 snapshots versionnés
 │   ├── cursors/                                                       curseurs de reprise
+│   ├── ledger.jsonl                                                   registre des apports / retraits (append-only)
 │   ├── gaps.parquet                                                   table des trous
 │   └── trials.jsonl                                                   registre d'essais (N)
 └── reports/                                                           rapports générés
@@ -101,57 +104,81 @@ $DATA_ROOT/
 
 ## Ordre de livraison (un fichier source + son test par tour)
 
+Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section suivante) : le long terme passe avant la collecte et l'intraday, qui devient conditionnel.
+
 | # | Phase | Fichier | Statut |
 |---|---|---|---|
-| 1 | 0 · Socle | `core/config.py` (+ `pyproject.toml`, `config/*.yaml`, `conftest.py`) | à faire |
-| 2 | 0 · Socle | `core/timeutils.py` | à faire |
+| 1 | 0 · Socle | `core/config.py` (+ `pyproject.toml`, `config/*.yaml`, `conftest.py`) | validé |
+| 2 | 0 · Socle | `core/timeutils.py` | livré |
 | 3 | 0 · Socle | `core/jsonlog.py` | à faire |
-| 4 | 0 · Socle | `exchange/lot.py` | à faire |
-| 5 | 0 · Socle | `exchange/exchange_info.py` | à faire |
-| 6 | 0 · Données réelles | `data/archives.py` | à faire |
-| 7 | 1 · Gate | `costs/cost_model.py` | à faire |
-| 8 | 1 · Gate | `costs/cost_gate.py` | à faire |
+| 4 | 0 · Socle | `core/hashing.py` | à faire |
+| 5 | 0 · Socle | `core/ledger.py` | à faire |
+| 6 | 0 · Socle | `exchange/lot.py` | à faire |
+| 7 | 0 · Socle | `exchange/exchange_info.py` | à faire |
+| 8 | 0 · Socle | `exchange/effective_params.py` | à faire |
+| 9 | 0 · Données réelles | `data/archives.py` | à faire |
+| 10 | 1 · Gate | `costs/cost_model.py` | à faire |
+| 11 | 1 · Gate | `costs/cost_gate.py` | à faire |
 | — | 1 · Gate | **Cost gate v1 sur données réelles** : aggTrades (archives Binance) + book_ticker (jours gratuits Tardis.dev) | à faire |
-| 9 | 2 · Collecte | `core/hashing.py` | à faire |
-| 10 | 2 · Collecte | `data/cursor.py` | à faire |
-| 11 | 2 · Collecte | `data/raw_writer.py` | à faire |
-| 12 | 2 · Collecte | `data/collector.py` | à faire |
-| 13 | 2 · Collecte | `data/bronze.py` | à faire |
-| 14 | 2 · Collecte | `data/gaps.py` | à faire |
-| 15 | 2 · Collecte | `data/storage.py` | à faire |
-| — | 2 · Collecte | **Cost gate v2 sur bookTicker collecté** (BTCUSDT, ETHUSDT, ≥ 7 jours de bookTicker) | à faire |
-| 16 | 3 · Features | `features/kernels.py` | à faire |
-| 17 | 3 · Features | `features/book.py` | à faire |
-| 18 | 3 · Features | `features/flow.py` | à faire |
-| 19 | 3 · Features | `features/spreads.py` | à faire |
-| 20 | 3 · Features | `features/volatility.py` | à faire |
-| 21 | 3 · Features | `features/seasonality.py` | à faire |
-| 22 | 4 · Recherche | `research/hypothesis.py` | à faire |
-| 23 | 4 · Recherche | `research/trials.py` | à faire |
-| 24 | 4 · Recherche | `sampling/bars.py` | à faire |
-| 25 | 4 · Recherche | `sampling/labels.py` | à faire |
-| 26 | 4 · Recherche | `research/stats.py` | à faire |
-| 27 | 4 · Recherche | `research/bootstrap.py` | à faire |
-| 28 | 4 · Recherche | `research/cv.py` | à faire |
-| 29 | 4 · Recherche | `research/ic.py` | à faire |
-| 30 | 4 · Recherche | `research/report.py` | à faire |
-| 31 | 5 · Long terme | `longterm/klines.py` | à faire |
-| 32 | 5 · Long terme | `longterm/universe.py` | à faire |
-| 33 | 5 · Long terme | `longterm/signals.py` | à faire |
-| 34 | 5 · Long terme | `longterm/allocation.py` | à faire |
-| 35 | 5 · Long terme | `longterm/lt_costs.py` | à faire |
-| 36 | 5 · Long terme | `sizing/sizing.py` | à faire |
-| 37 | 5 · Long terme | `longterm/lt_backtest.py` | à faire |
-| 38 | 5 · Long terme | `longterm/lt_report.py` | à faire |
-| 39 | 6 · Backtest ID | `backtest/events.py` | à faire |
-| 40 | 6 · Backtest ID | `backtest/fills.py` | à faire |
-| 41 | 6 · Backtest ID | `backtest/engine.py` | à faire |
-| 42 | 6 · Backtest ID | `backtest/leakage.py` | à faire |
-| 43 | 7 · Paper | `live/risk.py` | à faire |
-| 44 | 7 · Paper | `live/broker.py` | à faire |
-| 45 | 7 · Paper | `live/paper.py` | à faire |
+| 12 | 2 · Recherche | `research/hypothesis.py` | à faire |
+| 13 | 2 · Recherche | `research/trials.py` | à faire |
+| 14 | 2 · Recherche | `research/stats.py` | à faire |
+| 15 | 2 · Recherche | `research/bootstrap.py` | à faire |
+| 16 | 2 · Recherche | `research/cv.py` | à faire |
+| 17 | 2 · Recherche | `research/report.py` | à faire |
+| 18 | 3 · Long terme | `longterm/klines.py` | à faire |
+| 19 | 3 · Long terme | `longterm/universe.py` | à faire |
+| 20 | 3 · Long terme | `longterm/signals.py` | à faire |
+| 21 | 3 · Long terme | `longterm/allocation.py` | à faire |
+| 22 | 3 · Long terme | `longterm/lt_costs.py` | à faire |
+| 23 | 3 · Long terme | `sizing/sizing.py` | à faire |
+| 24 | 3 · Long terme | `longterm/lt_backtest.py` | à faire |
+| 25 | 3 · Long terme | `longterm/lt_report.py` | à faire |
+| 26 | 4 · Paper LT | `live/risk.py` | à faire |
+| 27 | 4 · Paper LT | `live/broker.py` | à faire |
+| 28 | 4 · Paper LT | `live/paper.py` | à faire |
 
-Le long terme est placé après la phase 4 parce qu'il réutilise `stats`, `bootstrap`, `cv`, `trials` et `report`, mais pas les features de microstructure ni le backtester événementiel. Il peut donc avancer pendant que le collecteur accumule des données. À 50 €, c'est aussi le volet le plus susceptible de passer son gate.
+**Volet intraday — conditionnel.** Il ne démarre que si le cost gate v1 trouve un horizon intraday franchissable (par exemple grâce à un palier de frais plus bas ou à l'exécution maker). Sinon, il reste en attente et le rapport du gate le dit.
+
+| # | Phase | Fichier | Statut |
+|---|---|---|---|
+| 29 | 5 · Collecte | `data/cursor.py` | en attente du gate |
+| 30 | 5 · Collecte | `data/raw_writer.py` | en attente du gate |
+| 31 | 5 · Collecte | `data/collector.py` | en attente du gate |
+| 32 | 5 · Collecte | `data/bronze.py` | en attente du gate |
+| 33 | 5 · Collecte | `data/gaps.py` | en attente du gate |
+| 34 | 5 · Collecte | `data/storage.py` | en attente du gate |
+| — | 5 · Collecte | **Cost gate v2 sur bookTicker collecté** (≥ 7 jours) | en attente du gate |
+| 35 | 6 · Features | `features/kernels.py` | en attente du gate |
+| 36 | 6 · Features | `features/book.py` | en attente du gate |
+| 37 | 6 · Features | `features/flow.py` | en attente du gate |
+| 38 | 6 · Features | `features/spreads.py` | en attente du gate |
+| 39 | 6 · Features | `features/volatility.py` | en attente du gate |
+| 40 | 6 · Features | `features/seasonality.py` | en attente du gate |
+| 41 | 7 · Recherche ID | `sampling/bars.py` | en attente du gate |
+| 42 | 7 · Recherche ID | `sampling/labels.py` | en attente du gate |
+| 43 | 7 · Recherche ID | `research/ic.py` | en attente du gate |
+| 44 | 8 · Backtest ID | `backtest/events.py` | en attente du gate |
+| 45 | 8 · Backtest ID | `backtest/fills.py` | en attente du gate |
+| 46 | 8 · Backtest ID | `backtest/engine.py` | en attente du gate |
+| 47 | 8 · Backtest ID | `backtest/leakage.py` | en attente du gate |
+
+Les petits fichiers sans logique (`__init__.py`, etc.) accompagnent le fichier source suivant au lieu d'occuper un tour.
+
+## Estimation préliminaire du gate (2026-09-25, jetable, hors code du projet)
+
+Bougies 1 min d'août 2026 (`data.binance.vision`) et spreads `bookTicker` échantillonnés 1/s pendant 120 s. Frais VIP 0 : 0,1 % par jambe. Coût aller-retour taker `c = 2f + s̃` ; le spread vaut 1 tick sur les six paires, donc `c ≈ 0,20 %` (0,15 % avec la remise BNB).
+
+| Paire | Volume 24 h (devise) | 1 min | 5 min | 15 min | 1 h | 4 h | 1 j | Horizon ratio > 3 |
+|---|---|---|---|---|---|---|---|---|
+| BTCUSDT | 1,57 Md | ×0,08 | ×0,20 | ×0,35 | ×0,72 | ×1,50 | ×3,74 | 1 j |
+| BTCUSDC | 0,41 Md | ×0,09 | ×0,20 | ×0,35 | ×0,71 | ×1,51 | ×3,73 | 1 j |
+| BTCEUR | 8,6 M | ×0,08 | ×0,20 | ×0,35 | ×0,73 | ×1,54 | ×3,51 | 1 j |
+| ETHUSDT | 0,69 Md | ×0,11 | ×0,26 | ×0,44 | ×0,89 | ×1,89 | ×4,12 | 1 j |
+| ETHUSDC | 0,31 Md | ×0,12 | ×0,26 | ×0,44 | ×0,89 | ×1,89 | ×4,14 | 1 j |
+| ETHEUR | 9,0 M | ×0,11 | ×0,26 | ×0,44 | ×0,90 | ×1,91 | ×4,12 | 1 j |
+
+Ratio = mouvement absolu médian du mid / c (taker, sans BNB). Même avec BNB, aucun horizon ≤ 4 h ne dépasse 3. Limites : un seul mois, spreads mesurés sur 2 minutes seulement, 5 s et 30 s non mesurables avec des bougies 1 min (ils seraient encore plus bas). Le cost gate v1 (étape 11) refera ce calcul proprement.
 
 ## Sources de données réelles
 

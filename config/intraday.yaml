@@ -1,0 +1,24 @@
+# Volet intraday. Suffixes d'unité : _s secondes, _ms millisecondes, _frac fraction.
+
+gate:
+  horizons_s: [5, 30, 60, 300, 900]  # §5 : 5 s, 30 s, 1 min, 5 min, 15 min
+  min_move_cost_ratio: 3.0           # horizon retenu : premier où mouvement médian / c > 3
+  slot_minutes: 60                   # tranche horaire du gate (UTC)
+  slippage_frac: 0.0                 # slippage supposé par jambe au top of book (hypothèse)
+
+latency:
+  data_ms: 100                       # retard des données vues par la décision
+  order_ms: 100                      # délai décision → exécution
+
+features:
+  flow_windows_s: [1, 5, 30, 60, 300]
+  ofi_depth_window_s: 300            # normalisation de l'OFI par la profondeur moyenne récente
+  vpin_buckets_per_day: 50           # volume d'un bucket = volume journalier moyen / 50
+  vpin_n_buckets: 50
+  realized_spread_delay_ms: 5000     # δ du spread réalisé
+  ewma_lambda: 0.94
+  signature_freqs_s: [1, 5, 10, 30, 60, 300, 900]
+  seasonality_slot_minutes: 5
+
+risk:
+  freshness_max_ms: 2000             # kill switch : donnée plus vieille que ça ⇒ arrêt

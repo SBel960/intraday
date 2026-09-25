@@ -1,0 +1,47 @@
+# Configuration commune intraday + long terme.
+# Unités : suffixe _frac = fraction (0.001 = 0,1 %), _quote = devise de cotation, _gb = gigaoctets.
+
+data:
+  root: /home/bsouf/qlab-data        # système de fichiers Linux de WSL2, jamais sous /mnt
+  disk_budget_gb: 150
+  disk_alert_fraction: 0.8           # alerte à 80 % du budget
+
+exchanges:
+  - name: binance
+    rest_url: https://api.binance.com
+    ws_url: wss://stream.binance.com:9443
+    # Barème de repli (VIP 0). Le barème réel du compte est relu et versionné par exchange_info.py ;
+    # tout changement (repli ou snapshot) déclenche le recalcul des coûts.
+    fees:
+      maker_frac: 0.001
+      taker_frac: 0.001
+      bnb_discount_frac: 0.25          # remise si les frais sont payés en BNB
+      pay_in_bnb: false
+      snapshot_refresh_hours: 24
+
+archives:
+  binance_vision_url: https://data.binance.vision
+  tardis_url: https://datasets.tardis.dev
+
+symbols:
+  quote_asset: USDT
+  intraday: [BTCUSDT, ETHUSDT]
+
+risk:
+  max_daily_loss_frac: 0.05          # du capital du palier
+  max_open_positions: 1
+  max_order_frac: 1.0                # taille max d'un ordre, en fraction du capital
+
+# Paliers de capital, en devise de cotation, strictement croissants.
+# Seuils sur le capital APPORTÉ (dépôts − retraits), jamais sur la valeur du portefeuille :
+# on monte de palier en déposant, et une perte ne fait jamais redescendre de palier.
+capital_tiers:
+  - name: t0
+    capital_quote: 50
+    max_drawdown_frac: 0.30
+  - name: t1
+    capital_quote: 200
+    max_drawdown_frac: 0.25
+  - name: t2
+    capital_quote: 1000
+    max_drawdown_frac: 0.20

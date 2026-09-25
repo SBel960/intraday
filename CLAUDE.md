@@ -14,4 +14,7 @@
 - Spécifications : `docs/SPEC_INTRADAY.md` et `docs/SPEC_LONG_TERME.md`.
 - Arborescence et statut de chaque fichier : `docs/ARBORESCENCE.md`. Mets le statut à jour à chaque livraison.
 - Règle du §11 : **un fichier source + son test par tour**. Lance les tests, montre la sortie réelle, remplis la checklist, puis attends « validé » avant le fichier suivant.
+- À chaque « validé » : commit du fichier validé (et de son test) puis push sur la branche de travail.
+- Les petits fichiers sans logique (`__init__.py`, etc.) accompagnent le fichier source suivant.
+- Horloge : l'horloge de WSL suit celle de Windows, qui a déjà dérivé (+1,35 s le 2026-09-25). Tout code qui dépend de l'heure locale (collecteur, fraîcheur, latences) doit mesurer l'écart avec l'heure serveur et refuser de tourner au-delà d'un seuil de la config.
 - Données réelles uniquement pour les rapports. Les tests unitaires utilisent de petits jeux construits à la main, avec les valeurs attendues écrites dans le test.
