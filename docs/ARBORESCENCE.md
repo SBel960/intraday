@@ -15,6 +15,7 @@ Chaque besoin transversal a **un seul endroit** ; un nouveau module s'y branche 
 | Erreurs et codes de sortie | `core/errors.py` (`QlabError`, `run_cli`) | `except Exception` hors `run_cli`, `sys.exit` dans le code métier |
 | Temps | `core/timeutils.py` (entiers ms / µs) | `datetime` pour stocker ou calculer des horodatages |
 | Montants, prix, quantités | `core/money.py` (`Decimal`) ; filtres de lot dans `exchange/lot.py` | flottants pour de l'argent |
+| Écriture de fichiers | `core/files.py` (`write_atomic`) | `tempfile` + `os.replace` recopiés |
 | Journal | `core/jsonlog.py` via `Context.journal` | `print` comme seule trace d'un événement important |
 | Valeurs métier | `config/*.yaml` via `core/config.py` | seuils, frais, symboles ou chemins en dur |
 
@@ -56,6 +57,7 @@ intraday/
 │   │   ├── paths.py               SEUL endroit des chemins sous $DATA_ROOT (DataPaths)
 │   │   ├── http.py                SEUL accès réseau : attente sans fin du retour du réseau, 429 (Retry-After), arrêt sur 418
 │   │   ├── cli.py                 mécanique commune des commandes : --config, config, chemins, journal, codes de sortie
+│   │   ├── files.py               écriture atomique (temporaire, fsync, renommage) ; jamais d'écrasement par défaut
 │   │   ├── money.py               montants en Decimal : saisie bornée, écriture décimale, nombre de la config → Decimal exact
 │   │   └── ledger.py              registre append-only des apports / retraits → capital apporté (palier), flux TWR / MWR
 │   ├── exchange/
@@ -72,7 +74,9 @@ intraday/
 │   │   ├── collector.py           websockets aggTrade + bookTicker, reconnexion, horodatage de réception, contrôle de l'écart d'horloge vs serveur
 │   │   ├── bronze.py              RAW → Bronze Parquet ZSTD, dédup sur (source, symbol, ts, seq), idempotent
 │   │   ├── gaps.py                détection des trous (seq et temps), table des trous, jamais d'interpolation
-│   │   ├── archives.py            data.binance.vision : bougies de TOUTES les paires spot (retirées comprises), financement et positions ouvertes des contrats USDⓈ-M, aggTrades des paires intraday ; Tardis.dev (book_ticker) ; checksum
+│   │   ├── binance_vision.py      data.binance.vision : listage S3 paginé, clés des jeux de données, lecture des .CHECKSUM (aucun téléchargement)
+│   │   ├── archives.py            synchronisation vers raw/binance_vision/ : bougies de TOUTES les paires spot (retirées comprises), financement USDⓈ-M, métriques des paires listées ; SHA-256, parallèle, reprise
+│   │   ├── tardis.py              (avec le cost gate) book_ticker historique de Tardis.dev, jours gratuits
 │   │   └── storage.py             taille disque par couche, projection de remplissage, alerte vs budget 150 Go
 │   ├── features/
 │   │   ├── kernels.py             boucles Numba (OFI, buckets VPIN, fenêtres glissantes)
@@ -125,7 +129,8 @@ intraday/
 
 ```
 $DATA_ROOT/
-├── raw/{source}/{stream}/{symbol}/date=YYYY-MM-DD/HH.jsonl.zst      append-only, jamais modifié
+├── raw/{source}/{stream}/{symbol}/date=YYYY-MM-DD/HH.jsonl.zst      collecteur : append-only, jamais modifié
+├── raw/binance_vision/{spot|futures}/…/*.zip                         archives téléchargées telles quelles (SHA-256 vérifié), jamais modifiées (~3 Go)
 ├── bronze/{source}/{stream}/{symbol}/date=YYYY-MM-DD/*.parquet      ZSTD, dédupliqué, idempotent
 ├── silver/{features|bars|labels}/{symbol}/date=YYYY-MM-DD/*.parquet features dérivées uniquement
 ├── events/{calendar|news|flags}/date=YYYY-MM-DD/*                   phase 9 : événements horodatés à la réception
@@ -155,36 +160,38 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 6 | 0 · Socle | `core/paths.py` | validé |
 | 7 | 0 · Socle | `core/http.py` | validé |
 | 8 | 0 · Socle | `core/cli.py` | validé |
-| 9 | 0 · Socle | `core/money.py` | validé |
-| 10 | 0 · Socle | `core/ledger.py` | validé |
-| 11 | 0 · Socle | `exchange/lot.py` | validé |
-| 12 | 0 · Socle | `exchange/snapshots.py` | validé |
-| 13 | 0 · Socle | `exchange/exchange_info.py` (+ `ops/qlab-exchange-info.*`) | validé |
-| 14 | 0 · Socle | `exchange/effective_params.py` | validé |
-| 15 | 0 · Données réelles | `data/archives.py` | à faire |
-| 16 | 1 · Gate | `costs/cost_model.py` | à faire |
-| 17 | 1 · Gate | `costs/cost_gate.py` | à faire |
+| 9 | 0 · Socle | `core/files.py` | validé |
+| 10 | 0 · Socle | `core/money.py` | validé |
+| 11 | 0 · Socle | `core/ledger.py` | validé |
+| 12 | 0 · Socle | `exchange/lot.py` | validé |
+| 13 | 0 · Socle | `exchange/snapshots.py` | validé |
+| 14 | 0 · Socle | `exchange/exchange_info.py` (+ `ops/qlab-exchange-info.*`) | validé |
+| 15 | 0 · Socle | `exchange/effective_params.py` | validé |
+| 16 | 0 · Données réelles | `data/binance_vision.py` | validé |
+| 17 | 0 · Données réelles | `data/archives.py` | validé |
+| 18 | 1 · Gate | `costs/cost_model.py` | à faire |
+| 19 | 1 · Gate | `costs/cost_gate.py` | à faire |
 | — | 1 · Gate | **Cost gate v1 sur données réelles** : aggTrades (archives Binance) + book_ticker (jours gratuits Tardis.dev) | à faire |
-| 18 | 2 · Recherche | `research/hypothesis.py` (+ `hypotheses/_template.yaml`) | à faire |
-| 19 | 2 · Recherche | `hypotheses/lt_*.yaml` : 6 fiches initiales, écrites avant tout test | à faire |
-| 20 | 2 · Recherche | `research/trials.py` | à faire |
-| 21 | 2 · Recherche | `research/stats.py` | à faire |
-| 22 | 2 · Recherche | `research/bootstrap.py` | à faire |
-| 23 | 2 · Recherche | `research/cv.py` | à faire |
-| 24 | 2 · Recherche | `research/ic.py` (remonté de l'intraday ; version transversale) | à faire |
-| 25 | 2 · Recherche | `research/report.py` | à faire |
-| 26 | 3 · Long terme | `longterm/klines.py` | à faire |
-| 27 | 3 · Long terme | `longterm/universe.py` | à faire |
-| 28 | 3 · Long terme | `longterm/market_state.py` | à faire |
-| 29 | 3 · Long terme | `longterm/signals.py` | à faire |
-| 30 | 3 · Long terme | `longterm/allocation.py` | à faire |
-| 31 | 3 · Long terme | `longterm/lt_costs.py` | à faire |
-| 32 | 3 · Long terme | `sizing/sizing.py` | à faire |
-| 33 | 3 · Long terme | `longterm/lt_backtest.py` | à faire |
-| 34 | 3 · Long terme | `longterm/lt_report.py` | à faire |
-| 35 | 4 · Paper LT | `live/risk.py` | à faire |
-| 36 | 4 · Paper LT | `live/broker.py` | à faire |
-| 37 | 4 · Paper LT | `live/paper.py` | à faire |
+| 20 | 2 · Recherche | `research/hypothesis.py` (+ `hypotheses/_template.yaml`) | à faire |
+| 21 | 2 · Recherche | `hypotheses/lt_*.yaml` : 6 fiches initiales, écrites avant tout test | à faire |
+| 22 | 2 · Recherche | `research/trials.py` | à faire |
+| 23 | 2 · Recherche | `research/stats.py` | à faire |
+| 24 | 2 · Recherche | `research/bootstrap.py` | à faire |
+| 25 | 2 · Recherche | `research/cv.py` | à faire |
+| 26 | 2 · Recherche | `research/ic.py` (remonté de l'intraday ; version transversale) | à faire |
+| 27 | 2 · Recherche | `research/report.py` | à faire |
+| 28 | 3 · Long terme | `longterm/klines.py` | à faire |
+| 29 | 3 · Long terme | `longterm/universe.py` | à faire |
+| 30 | 3 · Long terme | `longterm/market_state.py` | à faire |
+| 31 | 3 · Long terme | `longterm/signals.py` | à faire |
+| 32 | 3 · Long terme | `longterm/allocation.py` | à faire |
+| 33 | 3 · Long terme | `longterm/lt_costs.py` | à faire |
+| 34 | 3 · Long terme | `sizing/sizing.py` | à faire |
+| 35 | 3 · Long terme | `longterm/lt_backtest.py` | à faire |
+| 36 | 3 · Long terme | `longterm/lt_report.py` | à faire |
+| 37 | 4 · Paper LT | `live/risk.py` | à faire |
+| 38 | 4 · Paper LT | `live/broker.py` | à faire |
+| 39 | 4 · Paper LT | `live/paper.py` | à faire |
 
 **Phase 9 — Événements (informations hors marché), après le paper LT.** Décidée le 2026-09-25 : le projet ne regarde aujourd'hui que des chiffres de marché ; un tweet, une annonce de la Fed ou un piratage n'entrent dans aucun calcul, et le kill switch ne voit que leurs conséquences sur les prix. Usage prévu d'abord pour le **risque** (ne pas être exposé au mauvais moment), et seulement ensuite, éventuellement, comme signal (fiche d'hypothèse, essai compté dans le DSR, cost gate). Règles à respecter :
 
@@ -195,34 +202,34 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 
 | # | Phase | Fichier | Statut |
 |---|---|---|---|
-| 38 | 9 · Événements | `docs/SPEC_EVENEMENTS.md` (spécification, à valider avant le code) | à faire |
-| 39 | 9 · Événements | `events/calendar.py` | à faire |
-| 40 | 9 · Événements | `events/news.py` | à faire |
-| 41 | 9 · Événements | `events/classify.py` | à faire |
+| 40 | 9 · Événements | `docs/SPEC_EVENEMENTS.md` (spécification, à valider avant le code) | à faire |
+| 41 | 9 · Événements | `events/calendar.py` | à faire |
+| 42 | 9 · Événements | `events/news.py` | à faire |
+| 43 | 9 · Événements | `events/classify.py` | à faire |
 
 **Volet intraday — conditionnel.** Il ne démarre que si le cost gate v1 trouve un horizon intraday franchissable (par exemple grâce à un palier de frais plus bas ou à l'exécution maker). Sinon, il reste en attente et le rapport du gate le dit.
 
 | # | Phase | Fichier | Statut |
 |---|---|---|---|
-| 42 | 5 · Collecte | `data/cursor.py` | en attente du gate |
-| 43 | 5 · Collecte | `data/raw_writer.py` | en attente du gate |
-| 44 | 5 · Collecte | `data/collector.py` | en attente du gate |
-| 45 | 5 · Collecte | `data/bronze.py` | en attente du gate |
-| 46 | 5 · Collecte | `data/gaps.py` | en attente du gate |
-| 47 | 5 · Collecte | `data/storage.py` | en attente du gate |
+| 44 | 5 · Collecte | `data/cursor.py` | en attente du gate |
+| 45 | 5 · Collecte | `data/raw_writer.py` | en attente du gate |
+| 46 | 5 · Collecte | `data/collector.py` | en attente du gate |
+| 47 | 5 · Collecte | `data/bronze.py` | en attente du gate |
+| 48 | 5 · Collecte | `data/gaps.py` | en attente du gate |
+| 49 | 5 · Collecte | `data/storage.py` | en attente du gate |
 | — | 5 · Collecte | **Cost gate v2 sur bookTicker collecté** (≥ 7 jours) | en attente du gate |
-| 48 | 6 · Features | `features/kernels.py` | en attente du gate |
-| 49 | 6 · Features | `features/book.py` | en attente du gate |
-| 50 | 6 · Features | `features/flow.py` | en attente du gate |
-| 51 | 6 · Features | `features/spreads.py` | en attente du gate |
-| 52 | 6 · Features | `features/volatility.py` | en attente du gate |
-| 53 | 6 · Features | `features/seasonality.py` | en attente du gate |
-| 54 | 7 · Recherche ID | `sampling/bars.py` | en attente du gate |
-| 55 | 7 · Recherche ID | `sampling/labels.py` | en attente du gate |
-| 56 | 8 · Backtest ID | `backtest/events.py` | en attente du gate |
-| 57 | 8 · Backtest ID | `backtest/fills.py` | en attente du gate |
-| 58 | 8 · Backtest ID | `backtest/engine.py` | en attente du gate |
-| 59 | 8 · Backtest ID | `backtest/leakage.py` | en attente du gate |
+| 50 | 6 · Features | `features/kernels.py` | en attente du gate |
+| 51 | 6 · Features | `features/book.py` | en attente du gate |
+| 52 | 6 · Features | `features/flow.py` | en attente du gate |
+| 53 | 6 · Features | `features/spreads.py` | en attente du gate |
+| 54 | 6 · Features | `features/volatility.py` | en attente du gate |
+| 55 | 6 · Features | `features/seasonality.py` | en attente du gate |
+| 56 | 7 · Recherche ID | `sampling/bars.py` | en attente du gate |
+| 57 | 7 · Recherche ID | `sampling/labels.py` | en attente du gate |
+| 58 | 8 · Backtest ID | `backtest/events.py` | en attente du gate |
+| 59 | 8 · Backtest ID | `backtest/fills.py` | en attente du gate |
+| 60 | 8 · Backtest ID | `backtest/engine.py` | en attente du gate |
+| 61 | 8 · Backtest ID | `backtest/leakage.py` | en attente du gate |
 
 Les petits fichiers sans logique (`__init__.py`, etc.) accompagnent le fichier source suivant au lieu d'occuper un tour.
 

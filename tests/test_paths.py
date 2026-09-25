@@ -16,12 +16,21 @@ def test_tree_matches_documentation() -> None:
     assert p.exchange_info_dir("binance") == Path("/data/meta/exchange_info/binance")
     assert p.logs == Path("/data/logs")
     assert p.reports == Path("/data/reports")
+    assert p.raw_archive("binance_vision", "spot/monthly/klines/BTCEUR/1d/X.zip") == Path(
+        "/data/raw/binance_vision/spot/monthly/klines/BTCEUR/1d/X.zip"
+    )
 
 
 def test_documented_in_arborescence() -> None:
     """Chaque dossier de DataPaths figure dans l'arbre « Données » de ARBORESCENCE.md."""
     doc = (Path(__file__).resolve().parent.parent / "docs" / "ARBORESCENCE.md").read_text()
-    for fragment in ("ledger.jsonl", "exchange_info/{source}/", "logs/{component}/", "reports/"):
+    for fragment in (
+        "ledger.jsonl",
+        "exchange_info/{source}/",
+        "logs/{component}/",
+        "reports/",
+        "raw/{source}/",
+    ):
         assert fragment in doc
 
 
@@ -34,3 +43,9 @@ def test_no_directory_created(tmp_path: Path) -> None:
 def test_unsafe_names_rejected(bad: str) -> None:
     with pytest.raises(ValueError, match="invalide pour un chemin"):
         DataPaths(Path("/data")).exchange_info_dir(bad)
+
+
+@pytest.mark.parametrize("key", ["", "/etc/passwd", "a/../../x", "a//b", "./a", "a/.."])
+def test_unsafe_archive_keys_rejected(key: str) -> None:
+    with pytest.raises(ValueError, match="clé d'archive invalide"):
+        DataPaths(Path("/data")).raw_archive("binance_vision", key)

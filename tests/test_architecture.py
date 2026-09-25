@@ -74,7 +74,9 @@ def test_layering(path: Path) -> None:
 def test_network_only_in_http(path: Path) -> None:
     if _rel(path) == "core/http.py":
         return
-    used = {n for n in _imports(_tree(path)) if n.startswith(("urllib", "requests", "http."))}
+    # urllib.parse (fabriquer une URL) est permis : il n'ouvre aucune connexion.
+    network = ("urllib.request", "urllib.error", "http.client", "socket", "requests", "aiohttp")
+    used = {n for n in _imports(_tree(path)) if n.startswith(network)}
     assert not used, f"{_rel(path)} accède au réseau hors core/http.py : {used}"
 
 

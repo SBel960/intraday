@@ -26,7 +26,11 @@ BASE: dict[str, object] = {
     ],
     "archives": {
         "binance_vision_url": "https://data.binance.vision",
+        "binance_vision_list_url": "https://s3-ap-northeast-1.amazonaws.com/data.binance.vision",
         "tardis_url": "https://datasets.tardis.dev",
+        "download_workers": 4,
+        "list_workers": 4,
+        "futures_metrics_symbols": ["BTCUSDT"],
     },
     "symbols": {
         "quote_asset": "USDT",

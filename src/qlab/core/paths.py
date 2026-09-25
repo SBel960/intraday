@@ -40,6 +40,14 @@ class DataPaths:
         """Snapshots versionnés d'``exchangeInfo`` (``exchange/snapshots.py``)."""
         return self.meta / "exchange_info" / _name("source", source)
 
+    def raw_archive(self, source: str, key: str) -> Path:
+        """Archive brute téléchargée telle quelle : ``raw/{source}/{key}`` (clé relative, ex.
+        ``spot/monthly/klines/BTCEUR/1d/BTCEUR-1d-2024-01.zip``). Jamais modifiée."""
+        parts = key.split("/")
+        if not key or key.startswith("/") or any(p in ("", ".", "..") for p in parts):
+            raise ValueError(f"clé d'archive invalide pour un chemin : {key!r}")
+        return self.root / "raw" / _name("source", source) / key
+
     @property
     def logs(self) -> Path:
         """Racine des journaux JSONL ; ``JsonLog`` y ajoute ``{component}/``."""

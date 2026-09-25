@@ -21,9 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
-import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,6 +30,7 @@ from typing import Any
 import zstandard
 
 from qlab.core.errors import DataError, ExchangeError
+from qlab.core.files import write_atomic
 from qlab.core.paths import DataPaths
 from qlab.exchange.lot import SymbolFilters
 
@@ -179,23 +178,8 @@ class SnapshotStore:
         data = zstandard.ZstdCompressor(level=19).compress(
             json.dumps(doc, sort_keys=True, ensure_ascii=False).encode("utf-8")
         )
+        write_atomic(self.dir / _ms_to_name(fetched_ms), data)
         path = self.dir / _ms_to_name(fetched_ms)
-        self.dir.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=self.dir, prefix=".tmp-")
-        try:
-            with os.fdopen(fd, "wb") as f:
-                f.write(data)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmp, path)
-        except BaseException:
-            Path(tmp).unlink(missing_ok=True)
-            raise
-        dir_fd = os.open(self.dir, os.O_RDONLY)
-        try:
-            os.fsync(dir_fd)
-        finally:
-            os.close(dir_fd)
         return SaveResult(
             Snapshot(path, self.source, fetched_ms, digest, fees, info),
             written=True,

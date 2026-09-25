@@ -22,7 +22,11 @@ exchanges:
 
 archives:
   binance_vision_url: https://data.binance.vision
+  binance_vision_list_url: https://s3-ap-northeast-1.amazonaws.com/data.binance.vision
   tardis_url: https://datasets.tardis.dev
+  download_workers: 8                  # téléchargements simultanés (~300 000 fichiers au 1er passage)
+  list_workers: 32                     # listages simultanés (serveur de listage à Tokyo : ~1 s/requête)
+  futures_metrics_symbols: [BTCUSDT, ETHUSDT, SOLUSDT]   # métriques quotidiennes : 1 fichier/jour/paire
 
 symbols:
   # EUR : compte dans l'EEE (MiCA, USDT indisponible) ; pas de conversion EUR → stablecoin.
