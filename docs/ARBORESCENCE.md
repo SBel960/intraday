@@ -26,6 +26,7 @@ intraday/
 │   │   ├── config.py              chargement YAML → dataclasses figées et validées ; erreur si une clé manque
 │   │   ├── timeutils.py           entiers UTC ms/µs, tranche 5 min, jour de semaine, conversions sans flottant
 │   │   ├── jsonlog.py             journal structuré JSONL (événements, décisions, erreurs)
+│   │   ├── errors.py              QlabError (ConfigError, DataError, ExchangeError), run_cli : codes de sortie 0 / 1 / 2
 │   │   ├── hashing.py             hash déterministe de fichiers et de tables Parquet (tests d'idempotence)
 │   │   └── ledger.py              registre append-only des apports / retraits → capital apporté (palier), flux TWR / MWR
 │   ├── exchange/
@@ -99,6 +100,7 @@ $DATA_ROOT/
 │   ├── ledger.jsonl                                                   registre des apports / retraits (append-only)
 │   ├── gaps.parquet                                                   table des trous
 │   └── trials.jsonl                                                   registre d'essais (N)
+├── logs/{component}/YYYY-MM-DD.jsonl                                 journaux JSONL append-only (jsonlog.py)
 └── reports/                                                           rapports générés
 ```
 
@@ -110,7 +112,8 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 |---|---|---|---|
 | 1 | 0 · Socle | `core/config.py` (+ `pyproject.toml`, `config/*.yaml`, `conftest.py`) | validé |
 | 2 | 0 · Socle | `core/timeutils.py` | validé |
-| 3 | 0 · Socle | `core/jsonlog.py` | à faire |
+| 3 | 0 · Socle | `core/jsonlog.py` | validé |
+| 3 bis | 0 · Socle | `core/errors.py` | validé |
 | 4 | 0 · Socle | `core/hashing.py` | à faire |
 | 5 | 0 · Socle | `core/ledger.py` | à faire |
 | 6 | 0 · Socle | `exchange/lot.py` | à faire |

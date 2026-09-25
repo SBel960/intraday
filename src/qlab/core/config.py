@@ -24,13 +24,15 @@ from typing import Any, get_args, get_origin, get_type_hints
 
 import yaml
 
+from qlab.core.errors import QlabError
+
 BASE_FILE = "base.yaml"
 INTRADAY_FILE = "intraday.yaml"
 LONGTERM_FILE = "longterm.yaml"
 MINUTES_PER_DAY = 1440
 
 
-class ConfigError(ValueError):
+class ConfigError(QlabError, ValueError):
     """Configuration absente, incomplète, mal typée ou hors domaine."""
 
 
