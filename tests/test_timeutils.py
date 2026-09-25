@@ -17,6 +17,7 @@ import polars as pl
 import pytest
 
 from qlab.core import timeutils as tu
+from qlab.core.errors import DataError
 
 T_2024 = 1_704_067_200_000
 T_AFTERNOON = 1_704_116_832_345
@@ -181,3 +182,15 @@ def test_to_us_unknown_unit() -> None:
 def test_bad_date_rejected(bad: str) -> None:
     with pytest.raises(ValueError, match="YYYY-MM-DD attendue"):
         tu.date_to_ms(bad)
+
+
+# --- non-régression du break test (2026-09-25) --------------------------------------------
+
+
+@pytest.mark.parametrize("ts", [10**15, -(10**15), 2**63, 1_735_689_600_000_000])
+def test_out_of_range_dates_raise_data_error(ts: int) -> None:
+    """Des µs lues comme des ms (ex. 2025-01-01 en µs) donnent l'an ~57 000 : erreur claire."""
+    with pytest.raises(DataError, match="µs confondues"):
+        tu.date_str(ts)
+    with pytest.raises(DataError, match="hors des années 1–9999"):
+        tu.ms_to_iso(ts)

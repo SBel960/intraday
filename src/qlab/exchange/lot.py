@@ -21,7 +21,16 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, InvalidOperation
+from decimal import (
+    ROUND_CEILING,
+    ROUND_FLOOR,
+    Context,
+    Decimal,
+    DivisionByZero,
+    InvalidOperation,
+    Overflow,
+    localcontext,
+)
 from typing import Literal
 
 from qlab.core.errors import DataError
@@ -40,6 +49,9 @@ RejectReason = Literal[
     "notional_above_max",
 ]
 ZERO = Decimal(0)
+# Précision de calcul : 60 chiffres significatifs (le contexte par défaut en a 28, ce qui fait
+# échouer ``quantize`` sur des valeurs extrêmes). Toute opération impossible lève une erreur.
+_CTX = Context(prec=60, traps=[InvalidOperation, DivisionByZero, Overflow])
 
 
 def _dec(name: str, value: object, *, positive: bool = False) -> Decimal:
@@ -63,7 +75,11 @@ def round_to_step(x: Decimal, step: Decimal, rounding: Rounding) -> Decimal:
     if step == 0:
         return x
     mode = ROUND_FLOOR if rounding == "down" else ROUND_CEILING
-    return ((x / step).to_integral_value(rounding=mode) * step).quantize(step)
+    try:
+        with localcontext(_CTX):
+            return ((x / step).to_integral_value(rounding=mode) * step).quantize(step)
+    except InvalidOperation as exc:
+        raise DataError(f"arrondi impossible (valeur hors précision) : x={x}, step={step}") from exc
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,7 +193,8 @@ def check_order(
     limit = order_type == "LIMIT"
     p = filters.round_price(price, side) if limit else _dec("price", price, positive=True)
     q = filters.round_qty(qty, order_type)
-    notional = q * p
+    with localcontext(_CTX):
+        notional = q * p  # exact : au plus ~30 chiffres pour des valeurs réalistes
 
     f = filters
     market_min = f.apply_min_to_market
@@ -213,5 +230,6 @@ def qty_for_quote(
     """
     amount = _dec("quote_amount", quote_amount)
     p = _dec("price", price, positive=True)
-    qty = filters.round_qty(amount / p, order_type)
-    return qty, amount - qty * p
+    with localcontext(_CTX):
+        qty = filters.round_qty(amount / p, order_type)
+        return qty, amount - qty * p

@@ -120,7 +120,10 @@ class Flow:
             "fiat": self.fiat,
         }
         text = json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-        return (text + "\n").encode("utf-8")
+        try:
+            return (text + "\n").encode("utf-8")
+        except UnicodeEncodeError as exc:  # ex. demi-caractère UTF-16 isolé dans la note
+            raise DataError(f"texte non encodable en UTF-8 : {exc.reason}") from exc
 
 
 def _parse_line(raw: bytes, n: int, path: Path) -> Flow:

@@ -27,7 +27,12 @@ BASE: dict[str, object] = {
         "binance_vision_url": "https://data.binance.vision",
         "tardis_url": "https://datasets.tardis.dev",
     },
-    "symbols": {"quote_asset": "USDT", "intraday": ["BTCUSDT", "ETHUSDT"]},
+    "symbols": {
+        "quote_asset": "USDT",
+        "trade": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+        "intraday": ["BTCUSDT", "ETHUSDT"],
+    },
+    "observe": {"include_delisted": True, "futures_metrics": True, "kline_intervals": ["1d", "1h"]},
     "risk": {"max_daily_loss_frac": 0.05, "max_open_positions": 1, "max_order_frac": 1.0},
     "capital_tiers": [
         {"name": "t0", "capital_quote": 50, "max_drawdown_frac": 0.3},

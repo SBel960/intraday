@@ -86,3 +86,18 @@ def test_errors_are_journaled(tmp_path: Path) -> None:
     assert bug["error"] == "ZeroDivisionError" and bug["bug"] is True
     assert isinstance(bug["trace"], str) and "ZeroDivisionError: div" in bug["trace"]
     assert all(r["level"] == "error" and r["kind"] == "run.failed" for r in read.records)
+
+
+# --- non-régression du break test (2026-09-25) --------------------------------------------
+
+
+@pytest.mark.parametrize("exc", [PermissionError(13, "Permission denied"), OSError(28, "No space")])
+def test_environment_errors_are_expected(
+    exc: OSError, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Disque plein, droits : erreur d'environnement ⇒ code 1, pas « bug » (2)."""
+    with JsonLog(tmp_path, "cli", clock_ms=lambda: T) as journal:
+        assert run_cli(lambda: _raise(exc), journal=journal) == EXIT_EXPECTED_ERROR
+    assert capsys.readouterr().err.startswith(f"ERREUR SYSTÈME ({type(exc).__name__})")
+    data = read_log(tmp_path / "cli" / "2024-01-01.jsonl").records[0]["data"]
+    assert isinstance(data, dict) and data["system"] is True and data["bug"] is False

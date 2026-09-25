@@ -26,7 +26,14 @@ archives:
 symbols:
   # EUR : compte dans l'EEE (MiCA, USDT indisponible) ; pas de conversion EUR → stablecoin.
   quote_asset: EUR
-  intraday: [BTCEUR, ETHEUR]
+  trade: [BTCEUR, ETHEUR, SOLEUR]    # univers TRADÉ : paires EUR les plus liquides
+  intraday: [BTCEUR, ETHEUR]         # inclus dans trade ; volet conditionnel au cost gate
+
+# Univers OBSERVÉ (vue globale du marché) : toutes les paires spot Binance, toutes devises.
+observe:
+  include_delisted: true             # paires retirées gardées : pas de biais du survivant
+  futures_metrics: true              # financement et positions ouvertes (contrats USDⓈ-M)
+  kline_intervals: [1d, 1h]
 
 risk:
   max_daily_loss_frac: 0.05          # du capital du palier

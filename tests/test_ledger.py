@@ -320,3 +320,13 @@ def test_cli_chronology_error(config_dir: Path, capsys: pytest.CaptureFixture[st
     assert main(["--config", cfg, "deposit", "50", "--date", "2024-02-01"]) == 0
     assert main(["--config", cfg, "deposit", "50", "--date", "2024-01-01"]) == 1
     assert "antérieur au dernier" in capsys.readouterr().err
+
+
+# --- non-régression du break test (2026-09-25) --------------------------------------------
+
+
+def test_lone_surrogate_in_note_is_data_error(tmp_path: Path) -> None:
+    ledger = _ledger(tmp_path)
+    with pytest.raises(DataError, match="non encodable en UTF-8"):
+        ledger.append(Flow(T, "deposit", Decimal("1"), "\ud800"))
+    assert ledger.flows() == ()

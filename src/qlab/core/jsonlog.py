@@ -10,13 +10,15 @@ les tests déterministes. Les valeurs doivent être du JSON strict : pas de NaN/
 conversion silencieuse d'objets (``TypeError``). Chaque ligne est écrite d'un seul appel
 système puis vidée ; ``fsync=True`` force l'écriture disque (décisions de trading).
 
-Crash pendant une écriture : la dernière ligne peut être tronquée. À la réouverture, l'écrivain
-termine la ligne partielle par ``\\n`` ; la lecture la signale dans ``corrupt_lines`` au lieu
-de l'ignorer en silence.
+Crash pendant une écriture : la dernière ligne peut être tronquée. Avant chaque écriture,
+l'écrivain termine une ligne partielle par ``\\n`` ; la lecture la signale dans
+``corrupt_lines`` au lieu de l'ignorer en silence. Chaque écriture se fait sous verrou exclusif
+(``flock``) : plusieurs processus peuvent écrire dans le même fichier sans se corrompre.
 """
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import re
@@ -45,7 +47,10 @@ def _encode(record: Mapping[str, object]) -> bytes:
         )
     except ValueError as exc:  # NaN ou inf
         raise ValueError(f"valeur non finie dans le journal : {exc}") from exc
-    return (text + "\n").encode("utf-8")
+    try:
+        return (text + "\n").encode("utf-8")
+    except UnicodeEncodeError as exc:  # ex. demi-caractère UTF-16 isolé (« surrogate »)
+        raise ValueError(f"texte non encodable en UTF-8 dans le journal : {exc.reason}") from exc
 
 
 class JsonLog:
@@ -84,13 +89,7 @@ class JsonLog:
         self._close_fd()
         self._dir.mkdir(parents=True, exist_ok=True)
         path = self.path_for(ts_ms)
-        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
-        size = os.fstat(fd).st_size
-        if size > 0:
-            with path.open("rb") as f:
-                f.seek(size - 1)
-                if f.read(1) != b"\n":  # ligne tronquée par un crash : on la termine
-                    os.write(fd, b"\n")
+        fd = os.open(path, os.O_RDWR | os.O_APPEND | os.O_CREAT, 0o644)
         self._fd, self._fd_date = fd, day
         return fd
 
@@ -118,11 +117,20 @@ class JsonLog:
             }
         )
         fd = self._fd_for(ts_ms)
-        written = os.write(fd, line)
-        if written != len(line):
-            raise OSError(f"écriture partielle du journal ({written}/{len(line)} octets)")
-        if self._fsync:
-            os.fsync(fd)
+        # Verrou exclusif le temps de l'écriture : plusieurs processus peuvent partager un
+        # fichier, et la réparation d'une ligne tronquée ne doit pas croiser une écriture.
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        try:
+            size = os.fstat(fd).st_size
+            if size > 0 and os.pread(fd, 1, size - 1) != b"\n":  # ligne tronquée (crash)
+                os.write(fd, b"\n")
+            written = os.write(fd, line)
+            if written != len(line):
+                raise OSError(f"écriture partielle du journal ({written}/{len(line)} octets)")
+            if self._fsync:
+                os.fsync(fd)
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
 
     def info(self, kind: str, data: Mapping[str, JsonValue] | None = None) -> None:
         self.log("info", kind, data)

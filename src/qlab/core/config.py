@@ -159,19 +159,51 @@ class ArchivesConfig:
 
 @dataclass(frozen=True, slots=True)
 class SymbolsConfig:
+    """Univers **tradé** : paires cotées en ``quote_asset``. ``intraday`` ⊆ ``trade``."""
+
     quote_asset: str
+    trade: tuple[str, ...]
     intraday: tuple[str, ...]
 
     def __post_init__(self) -> None:
-        _check(len(self.intraday) > 0, "intraday ne doit pas être vide")
-        _unique("intraday", self.intraday)
-        for sym in (self.quote_asset, *self.intraday):
+        for name in ("trade", "intraday"):
+            pairs: tuple[str, ...] = getattr(self, name)
+            _check(len(pairs) > 0, f"{name} ne doit pas être vide")
+            _unique(name, pairs)
+        for sym in (self.quote_asset, *self.trade, *self.intraday):
             _check(sym.isalnum() and sym.isupper(), f"symbole invalide : {sym!r}")
-        for sym in self.intraday:
+        for sym in self.trade:
             _check(
                 sym.endswith(self.quote_asset) and sym != self.quote_asset,
                 f"{sym} n'est pas coté en {self.quote_asset}",
             )
+        extra = [s for s in self.intraday if s not in self.trade]
+        _check(not extra, f"intraday doit être inclus dans trade : {extra} absents de trade")
+
+
+BINANCE_KLINE_INTERVALS = frozenset(
+    {"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"}
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ObserveConfig:
+    """Univers **observé** (vue globale) : toutes les paires spot Binance, toutes devises.
+
+    ``include_delisted`` : garder les paires retirées (pas de biais du survivant).
+    ``futures_metrics`` : taux de financement et positions ouvertes des contrats USDⓈ-M.
+    ``kline_intervals`` : intervalles des bougies téléchargées ; ``1d`` obligatoire.
+    """
+
+    include_delisted: bool
+    futures_metrics: bool
+    kline_intervals: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        _unique("kline_intervals", self.kline_intervals)
+        bad = [i for i in self.kline_intervals if i not in BINANCE_KLINE_INTERVALS]
+        _check(not bad, f"kline_intervals inconnus de Binance : {bad}")
+        _check("1d" in self.kline_intervals, "kline_intervals doit contenir 1d (volet long terme)")
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,6 +235,7 @@ class BaseConfig:
     exchanges: tuple[ExchangeConfig, ...]
     archives: ArchivesConfig
     symbols: SymbolsConfig
+    observe: ObserveConfig
     risk: RiskConfig
     capital_tiers: tuple[CapitalTier, ...]
 

@@ -64,7 +64,11 @@ def test_repo_config_is_valid() -> None:
     cfg = load_config(REPO_CONFIG)
     assert cfg.intraday.gate.horizons_s == (5, 30, 60, 300, 900)
     assert cfg.base.symbols.quote_asset == "EUR"  # compte EEE (MiCA)
+    assert cfg.base.symbols.trade == ("BTCEUR", "ETHEUR", "SOLEUR")
     assert cfg.base.symbols.intraday == ("BTCEUR", "ETHEUR")
+    assert cfg.base.observe.include_delisted is True  # vue globale sans biais du survivant
+    assert cfg.base.observe.futures_metrics is True
+    assert cfg.base.observe.kline_intervals == ("1d", "1h")
     assert cfg.longterm.costs.eur_conversion_cost_frac == 0.0
 
 
@@ -88,10 +92,13 @@ def test_main_ok(config_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_single_symbol_and_single_tier(config_dir: Path) -> None:
     base = config_dir / "base.yaml"
+    _edit(base, ["symbols", "trade"], ["BTCUSDT"])
     _edit(base, ["symbols", "intraday"], ["BTCUSDT"])
+    _edit(base, ["observe", "kline_intervals"], ["1d"])
     _edit(base, ["capital_tiers"], [{"name": "t0", "capital_quote": 50, "max_drawdown_frac": 1}])
     cfg = load_base(base)
-    assert cfg.symbols.intraday == ("BTCUSDT",)
+    assert cfg.symbols.trade == cfg.symbols.intraday == ("BTCUSDT",)
+    assert cfg.observe.kline_intervals == ("1d",)
     assert len(cfg.capital_tiers) == 1
 
 
@@ -202,7 +209,17 @@ def test_data_root_symlink_to_mnt_rejected(config_dir: Path, tmp_path: Path) -> 
         (["exchanges", 0, "rest_url"], "http://api.binance.com", "https://"),
         (["exchanges", 0, "ws_url"], "https://x", "wss://"),
         (["symbols", "intraday"], ["BTCUSDT", "BTCUSDT"], "doublons"),
-        (["symbols", "intraday"], ["BTCEUR"], "pas coté en USDT"),
+        (["symbols", "trade"], ["BTCEUR"], "pas coté en USDT"),
+        (["symbols", "trade"], [], "trade ne doit pas être vide"),
+        (
+            ["symbols", "trade"],
+            ["BTCUSDT"],
+            r"intraday doit être inclus dans trade : \['ETHUSDT'\]",
+        ),
+        (["observe", "kline_intervals"], ["1h"], "doit contenir 1d"),
+        (["observe", "kline_intervals"], ["1d", "2d"], r"inconnus de Binance : \['2d'\]"),
+        (["observe", "kline_intervals"], ["1d", "1d"], "doublons"),
+        (["observe", "include_delisted"], "yes", "bool attendu"),
         (["symbols", "intraday"], ["btcusdt"], "symbole invalide"),
         (["risk", "max_open_positions"], 0, "max_open_positions"),
         (["capital_tiers", 1, "capital_quote"], 50, "strictement croissant"),

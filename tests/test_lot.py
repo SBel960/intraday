@@ -274,3 +274,19 @@ def test_negative_filter_rejected() -> None:
     broken[1]["stepSize"] = "-0.001"
     with pytest.raises(DataError, match="stepSize"):
         SymbolFilters.from_binance("X", broken)
+
+
+# --- non-régression du break test (2026-09-25) --------------------------------------------
+
+
+def test_extreme_values_do_not_crash(btceur: SymbolFilters) -> None:
+    """Le contexte Decimal par défaut (28 chiffres) faisait échouer quantize : plus maintenant."""
+    assert round_to_step(D("1e30"), D("0.00000001"), "down") == D("1e30")
+    assert check_order(btceur, "BUY", "LIMIT", D("1e40"), D("1")).reason == "qty_above_max"
+    qty, leftover = qty_for_quote(btceur, D("1e40"), D("0.01"), "LIMIT")
+    assert qty == D("1e42") and leftover == 0
+
+
+def test_beyond_precision_is_data_error() -> None:
+    with pytest.raises(DataError, match="hors précision"):
+        round_to_step(D("1e80"), D("1e-30"), "down")

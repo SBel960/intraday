@@ -15,6 +15,8 @@ from typing import Literal
 
 import polars as pl
 
+from qlab.core.errors import DataError
+
 US_PER_MS = 1_000
 MS_PER_S = 1_000
 US_PER_S = US_PER_MS * MS_PER_S
@@ -132,10 +134,22 @@ def hour_of_day(ts_ms: int) -> int:
 # --- dates et texte ----------------------------------------------------------------------
 
 
+def _from_epoch_ms(ts_ms: int) -> dt.datetime:
+    """``datetime`` UTC exact de ``ts_ms`` ; hors des années 1–9999 : ``DataError``."""
+    try:
+        return _EPOCH + dt.timedelta(milliseconds=_int("ts_ms", ts_ms))
+    except OverflowError as exc:
+        raise DataError(
+            f"epoch ms hors des années 1–9999 : {ts_ms} (unités ms / µs confondues ?)"
+        ) from exc
+
+
 def date_str(ts_ms: int) -> str:
-    """Date UTC ``YYYY-MM-DD`` du jour contenant ``ts_ms`` (partitions ``date=``)."""
-    days = _int("ts_ms", ts_ms) // MS_PER_DAY
-    return (_EPOCH + dt.timedelta(days=days)).date().isoformat()
+    """Date UTC ``YYYY-MM-DD`` du jour contenant ``ts_ms`` (partitions ``date=``).
+
+    ``DataError`` si ``ts_ms`` sort des années 1–9999 (typiquement des µs lues comme des ms).
+    """
+    return _from_epoch_ms(ts_ms).date().isoformat()
 
 
 def date_to_ms(date_iso: str) -> int:
@@ -152,7 +166,7 @@ def date_to_ms(date_iso: str) -> int:
 
 def ms_to_iso(ts_ms: int) -> str:
     """Epoch ms → ``YYYY-MM-DDTHH:MM:SS.mmmZ`` (journaux et rapports ; arithmétique entière)."""
-    d = _EPOCH + dt.timedelta(milliseconds=_int("ts_ms", ts_ms))
+    d = _from_epoch_ms(ts_ms)
     return d.strftime("%Y-%m-%dT%H:%M:%S.") + f"{d.microsecond // US_PER_MS:03d}Z"
 
 

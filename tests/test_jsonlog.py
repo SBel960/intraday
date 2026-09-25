@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+import multiprocessing
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
@@ -220,3 +221,39 @@ def test_write_after_close(tmp_path: Path) -> None:
 def test_read_missing_file(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         read_log(tmp_path / "absent.jsonl")
+
+
+# --- non-régression du break test (2026-09-25) --------------------------------------------
+
+
+def _concurrent_writer(log_dir: str, worker: int) -> None:
+    with JsonLog(Path(log_dir), "c", clock_ms=lambda: T) as journal:
+        for i in range(200):
+            journal.info("k", {"w": worker, "i": i, "pad": "x" * 3000})
+
+
+def test_concurrent_processes_no_corruption(tmp_path: Path) -> None:
+    """4 processus × 200 lignes de 3 Ko dans le même fichier : aucune ligne parasite."""
+    procs = [
+        multiprocessing.get_context("spawn").Process(
+            target=_concurrent_writer, args=(str(tmp_path), w)
+        )
+        for w in range(4)
+    ]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join()
+    assert [p.exitcode for p in procs] == [0, 0, 0, 0]
+    read = read_log(tmp_path / "c" / "2024-01-01.jsonl")
+    assert read.corrupt_lines == ()
+    assert len(read.records) == 800
+
+
+def test_lone_surrogate_rejected_clearly(tmp_path: Path) -> None:
+    with (
+        JsonLog(tmp_path, "paper", clock_ms=clock(T)) as journal,
+        pytest.raises(ValueError, match="non encodable en UTF-8"),
+    ):
+        journal.info("k", {"v": "\ud800"})
+    assert not (tmp_path / "paper" / "2024-01-01.jsonl").exists()  # rien d'écrit

@@ -18,11 +18,12 @@ intraday/
 │   ├── ARBORESCENCE.md            ce fichier + statut de validation par fichier
 │   └── SPEC_EVENEMENTS.md         (à écrire en début de phase 9) règles des informations hors marché
 ├── config/
-│   ├── base.yaml                  racine des données, budget disque, sources, symboles, limites de risque, paliers de capital
+│   ├── base.yaml                  racine des données, budget disque, sources, univers tradé (trade) et observé (observe), limites de risque, paliers de capital
 │   ├── intraday.yaml              horizons du gate, latences, fenêtres de features, seuils (fraîcheur, ratio 3)
 │   └── longterm.yaml              lookbacks, bandes de rééquilibrage, DCA (montant, période), vol cible
 ├── hypotheses/
-│   └── _template.yaml             modèle de fiche d'hypothèse (mécanisme, horizon, features, coût, edge min, abandon)
+│   ├── _template.yaml             modèle de fiche d'hypothèse (mécanisme, horizon, features, coût, edge min, abandon)
+│   └── lt_*.yaml                  6 fiches initiales, écrites AVANT tout test (voir « Détection de signal »)
 ├── src/qlab/
 │   ├── core/
 │   │   ├── config.py              chargement YAML → dataclasses figées et validées ; erreur si une clé manque
@@ -44,7 +45,7 @@ intraday/
 │   │   ├── collector.py           websockets aggTrade + bookTicker, reconnexion, horodatage de réception, contrôle de l'écart d'horloge vs serveur
 │   │   ├── bronze.py              RAW → Bronze Parquet ZSTD, dédup sur (source, symbol, ts, seq), idempotent
 │   │   ├── gaps.py                détection des trous (seq et temps), table des trous, jamais d'interpolation
-│   │   ├── archives.py            téléchargement data.binance.vision (aggTrades, klines) + Tardis.dev (book_ticker), checksum
+│   │   ├── archives.py            data.binance.vision : bougies de TOUTES les paires spot (retirées comprises), financement et positions ouvertes des contrats USDⓈ-M, aggTrades des paires intraday ; Tardis.dev (book_ticker) ; checksum
 │   │   └── storage.py             taille disque par couche, projection de remplissage, alerte vs budget 150 Go
 │   ├── features/
 │   │   ├── kernels.py             boucles Numba (OFI, buckets VPIN, fenêtres glissantes)
@@ -59,10 +60,10 @@ intraday/
 │   ├── research/
 │   │   ├── hypothesis.py          schéma, validation et hash des fiches d'hypothèse YAML
 │   │   ├── trials.py              registre d'essais append-only, compteur N par volet, persisté
-│   │   ├── stats.py               Sharpe annualisé, Lo 2002, Newey–West, PSR, DSR, MinTRL, test binomial
+│   │   ├── stats.py               Sharpe annualisé, Lo 2002, Newey–West, PSR, DSR, MinTRL, test binomial ; puissance (Sharpe minimal détectable), contrôle des fausses découvertes (Benjamini-Hochberg)
 │   │   ├── bootstrap.py           stationary bootstrap (Politis–Romano), graine fixée
 │   │   ├── cv.py                  purged K-fold + embargo, walk-forward (fenêtre glissante ou expansive)
-│   │   ├── ic.py                  IC Spearman par horizon, décroissance, comparaison à l'horizon du gate
+│   │   ├── ic.py                  IC Spearman par horizon et décroissance ; IC transversal (actifs comparés entre eux, date par date) moyenné avec t-stat Newey–West
 │   │   └── report.py              rapport Markdown : critères d'acceptation, verdict, comparaison buy & hold
 │   ├── sizing/
 │   │   └── sizing.py              vol targeting, Kelly (information, plafonné à 0,25 f*), limites de risque
@@ -82,6 +83,7 @@ intraday/
 │   └── longterm/
 │       ├── klines.py              bougies 1d / 1h → Bronze, contrôle qualité, trous marqués
 │       ├── universe.py            univers point-in-time (listing, délisting, chauffe) sans biais du survivant
+│       ├── market_state.py        vue globale : largeur (part des actifs au-dessus de leur moyenne), dispersion, part de BTC dans les volumes, corrélations, financement moyen
 │       ├── signals.py             momentum série temporelle, moyennes mobiles, momentum transversal, inverse vol
 │       ├── allocation.py          poids cibles → ordres : buy & hold, DCA, rééquilibrage calendaire / bandes, δ_min
 │       ├── lt_costs.py            GATE LT : turnover, drag, rejets minNotional par palier de capital
@@ -100,7 +102,8 @@ $DATA_ROOT/
 ├── bronze/{source}/{stream}/{symbol}/date=YYYY-MM-DD/*.parquet      ZSTD, dédupliqué, idempotent
 ├── silver/{features|bars|labels}/{symbol}/date=YYYY-MM-DD/*.parquet features dérivées uniquement
 ├── events/{calendar|news|flags}/date=YYYY-MM-DD/*                   phase 9 : événements horodatés à la réception
-├── lt/{klines_1d|klines_1h}/{symbol}.parquet                          long terme (< 1 Go)
+├── lt/{klines_1d|klines_1h}/{symbol}.parquet                          toutes les paires spot observées, retirées comprises (~3–5 Go)
+├── lt/futures/{funding|metrics}/{symbol}.parquet                      financement, positions ouvertes (contrats USDⓈ-M)
 ├── meta/
 │   ├── exchange_info/{source}/{YYYYMMDDTHHMMSSZ}.json                 snapshots versionnés
 │   ├── cursors/                                                       curseurs de reprise
@@ -130,14 +133,17 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 10 | 1 · Gate | `costs/cost_model.py` | à faire |
 | 11 | 1 · Gate | `costs/cost_gate.py` | à faire |
 | — | 1 · Gate | **Cost gate v1 sur données réelles** : aggTrades (archives Binance) + book_ticker (jours gratuits Tardis.dev) | à faire |
-| 12 | 2 · Recherche | `research/hypothesis.py` | à faire |
+| 12 | 2 · Recherche | `research/hypothesis.py` (+ `hypotheses/_template.yaml`) | à faire |
+| 12 bis | 2 · Recherche | `hypotheses/lt_*.yaml` : 6 fiches initiales, écrites avant tout test | à faire |
 | 13 | 2 · Recherche | `research/trials.py` | à faire |
 | 14 | 2 · Recherche | `research/stats.py` | à faire |
 | 15 | 2 · Recherche | `research/bootstrap.py` | à faire |
 | 16 | 2 · Recherche | `research/cv.py` | à faire |
+| 16 bis | 2 · Recherche | `research/ic.py` (remonté de l'intraday ; version transversale) | à faire |
 | 17 | 2 · Recherche | `research/report.py` | à faire |
 | 18 | 3 · Long terme | `longterm/klines.py` | à faire |
 | 19 | 3 · Long terme | `longterm/universe.py` | à faire |
+| 19 bis | 3 · Long terme | `longterm/market_state.py` | à faire |
 | 20 | 3 · Long terme | `longterm/signals.py` | à faire |
 | 21 | 3 · Long terme | `longterm/allocation.py` | à faire |
 | 22 | 3 · Long terme | `longterm/lt_costs.py` | à faire |
@@ -181,13 +187,36 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 40 | 6 · Features | `features/seasonality.py` | en attente du gate |
 | 41 | 7 · Recherche ID | `sampling/bars.py` | en attente du gate |
 | 42 | 7 · Recherche ID | `sampling/labels.py` | en attente du gate |
-| 43 | 7 · Recherche ID | `research/ic.py` | en attente du gate |
 | 44 | 8 · Backtest ID | `backtest/events.py` | en attente du gate |
 | 45 | 8 · Backtest ID | `backtest/fills.py` | en attente du gate |
 | 46 | 8 · Backtest ID | `backtest/engine.py` | en attente du gate |
 | 47 | 8 · Backtest ID | `backtest/leakage.py` | en attente du gate |
 
 Les petits fichiers sans logique (`__init__.py`, etc.) accompagnent le fichier source suivant au lieu d'occuper un tour.
+
+## Détection de signal (décidé le 2026-09-25)
+
+But : maximiser les chances de détecter un signal **réel**, pas le nombre de signaux. Tester beaucoup d'indicateurs fait toujours apparaître des « signaux » dus au hasard. Quatre leviers :
+
+1. **Plus de données indépendantes : observer large, trader étroit.** L'univers observé couvre toutes les paires spot Binance, toutes devises, retirées comprises (3 713 référencées, 1 368 en cotation, 497 actifs le 2026-09-25), plus le financement et les positions ouvertes des contrats à terme. Un signal testé transversalement sur des centaines d'actifs a bien plus de puissance que sur BTC seul (`research/ic.py`, version transversale). L'univers tradé reste étroit : BTCEUR, ETHEUR, SOLEUR (29 paires EUR disponibles), car à 50 € le minimum de 5 € et les frais limitent le nombre de lignes.
+2. **Hypothèses avec une raison économique, écrites avant les tests** (`hypotheses/lt_*.yaml`) : momentum temporel, momentum transversal, faible volatilité, retour à la moyenne court terme, taux de financement des contrats à terme, filtre d'état du marché (largeur). Peu d'essais bien choisis rendent le DSR moins sévère.
+3. **Puissance connue d'avance** (`research/stats.py`) : Sharpe minimal détectable vu l'historique et le nombre d'essais. Si la détection est impossible, le rapport dit « données insuffisantes », pas « pas de signal ». Contrôle des fausses découvertes (Benjamini-Hochberg) pour les familles de tests, en plus du DSR.
+4. **Coûts bas** : moins de transactions, ordres limites, remise BNB, cotation directe en EUR (cost gate, `lt_costs.py`).
+
+Ce qui ne marche pas : multiplier les indicateurs et les paramètres, optimiser jusqu'à obtenir un beau backtest. La preuve finale reste le paper trading en conditions réelles. Verdict possible et acceptable : rien ne bat le buy & hold après frais.
+
+**Plus tard, phase à part (optionnelle)** : marchés traditionnels (Nasdaq, dollar, taux, or), corrélés à la crypto ; sources gratuites moins fiables.
+
+## Break test (2026-09-25)
+
+Attaque des modules validés, hors code du projet : fuzz contre des références indépendantes (200 000 dates contre `datetime`, 100 000 ordres contre les propriétés des filtres), 8 processus concurrents, 20 `kill -9` en pleine écriture, config YAML piégée (alias récursif, « billion laughs », tag d'exécution Python, doublons), dossier en lecture seule. Résiste : dates, ordres, registre (concurrence et crash), config. Quatre défauts trouvés et corrigés, chacun avec son test de non-régression :
+
+1. `timeutils` : date hors des années 1–9999 (typiquement des µs lues comme des ms) ⇒ `OverflowError` ; désormais `DataError` explicite.
+2. `lot` : valeurs extrêmes ⇒ `InvalidOperation` (contexte `Decimal` à 28 chiffres) ; calcul à 60 chiffres, sinon `DataError`.
+3. `jsonlog` : écrivains concurrents ⇒ lignes vides parasites ; chaque écriture sous verrou `flock`.
+4. `errors.run_cli` : erreur d'environnement (`OSError` : disque plein, droits) ⇒ code 1 « ERREUR SYSTÈME », plus code 2 « bug ».
+
+Mineur : demi-caractère UTF-16 isolé ⇒ message clair (`jsonlog`, `ledger`).
 
 ## Estimation préliminaire du gate (2026-09-25, jetable, hors code du projet)
 
