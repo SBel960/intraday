@@ -39,7 +39,7 @@ intraday/
 │   │   ├── collector.py           websockets aggTrade + bookTicker, reconnexion, horodatage de réception
 │   │   ├── bronze.py              RAW → Bronze Parquet ZSTD, dédup sur (source, symbol, ts, seq), idempotent
 │   │   ├── gaps.py                détection des trous (seq et temps), table des trous, jamais d'interpolation
-│   │   ├── archives.py            téléchargement data.binance.vision (aggTrades, klines) + vérification checksum
+│   │   ├── archives.py            téléchargement data.binance.vision (aggTrades, klines) + Tardis.dev (book_ticker), checksum
 │   │   └── storage.py             taille disque par couche, projection de remplissage, alerte vs budget 150 Go
 │   ├── features/
 │   │   ├── kernels.py             boucles Numba (OFI, buckets VPIN, fenêtres glissantes)
@@ -108,17 +108,18 @@ $DATA_ROOT/
 | 3 | 0 · Socle | `core/jsonlog.py` | à faire |
 | 4 | 0 · Socle | `exchange/lot.py` | à faire |
 | 5 | 0 · Socle | `exchange/exchange_info.py` | à faire |
-| 6 | 1 · Gate | `costs/cost_model.py` | à faire |
-| 7 | 1 · Gate | `costs/cost_gate.py` | à faire |
-| 8 | 2 · Collecte | `core/hashing.py` | à faire |
-| 9 | 2 · Collecte | `data/cursor.py` | à faire |
-| 10 | 2 · Collecte | `data/raw_writer.py` | à faire |
-| 11 | 2 · Collecte | `data/collector.py` | à faire |
-| 12 | 2 · Collecte | `data/bronze.py` | à faire |
-| 13 | 2 · Collecte | `data/gaps.py` | à faire |
-| 14 | 2 · Collecte | `data/archives.py` | à faire |
+| 6 | 0 · Données réelles | `data/archives.py` | à faire |
+| 7 | 1 · Gate | `costs/cost_model.py` | à faire |
+| 8 | 1 · Gate | `costs/cost_gate.py` | à faire |
+| — | 1 · Gate | **Cost gate v1 sur données réelles** : aggTrades (archives Binance) + book_ticker (jours gratuits Tardis.dev) | à faire |
+| 9 | 2 · Collecte | `core/hashing.py` | à faire |
+| 10 | 2 · Collecte | `data/cursor.py` | à faire |
+| 11 | 2 · Collecte | `data/raw_writer.py` | à faire |
+| 12 | 2 · Collecte | `data/collector.py` | à faire |
+| 13 | 2 · Collecte | `data/bronze.py` | à faire |
+| 14 | 2 · Collecte | `data/gaps.py` | à faire |
 | 15 | 2 · Collecte | `data/storage.py` | à faire |
-| — | 2 · Collecte | **Rapport cost gate sur données réelles** (BTCUSDT, ETHUSDT, ≥ 7 jours de bookTicker) | à faire |
+| — | 2 · Collecte | **Cost gate v2 sur bookTicker collecté** (BTCUSDT, ETHUSDT, ≥ 7 jours de bookTicker) | à faire |
 | 16 | 3 · Features | `features/kernels.py` | à faire |
 | 17 | 3 · Features | `features/book.py` | à faire |
 | 18 | 3 · Features | `features/flow.py` | à faire |
@@ -151,6 +152,18 @@ $DATA_ROOT/
 | 45 | 7 · Paper | `live/paper.py` | à faire |
 
 Le long terme est placé après la phase 4 parce qu'il réutilise `stats`, `bootstrap`, `cv`, `trials` et `report`, mais pas les features de microstructure ni le backtester événementiel. Il peut donc avancer pendant que le collecteur accumule des données. À 50 €, c'est aussi le volet le plus susceptible de passer son gate.
+
+## Sources de données réelles
+
+| Besoin | Source | Disponible |
+|---|---|---|
+| Bougies 1d / 1h (volet long terme) | archives `data.binance.vision` | tout de suite, historique depuis 2017 |
+| Trades réels (aggTrades) | archives `data.binance.vision` | tout de suite |
+| Spread réel (book_ticker spot historique) | `datasets.tardis.dev` (1er jour de chaque mois gratuit, le reste payant) | tout de suite, échantillon mensuel |
+| Spread réel continu (bookTicker) | notre collecteur websocket | après ≥ 7 jours de collecte sur une machine allumée en continu |
+| tickSize, stepSize, minNotional | REST `exchangeInfo` | tout de suite |
+
+La base de données, ce sont les fichiers Parquet interrogés avec DuckDB. Il n'y a pas de serveur de base à installer.
 
 ## Dépendances externes prévues
 
