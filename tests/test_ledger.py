@@ -13,7 +13,7 @@ import pytest
 
 from qlab.core.errors import DataError
 from qlab.core.jsonlog import read_log
-from qlab.core.ledger import Flow, Ledger, main, parse_amount
+from qlab.core.ledger import Flow, Ledger, main
 
 T = 1_704_067_200_000  # 2024-01-01T00:00:00Z
 DAY = 86_400_000
@@ -80,11 +80,6 @@ def test_tiny_amount_never_scientific(tmp_path: Path) -> None:
     assert ledger.flows()[0].amount_quote == Decimal("0.00000001")
 
 
-def test_amount_bounds_accepted() -> None:
-    assert parse_amount("999999999999") == Decimal("999999999999")  # 10¹² − 1
-    assert parse_amount("0.000000000000000001") == Decimal("1E-18")  # 18 décimales
-
-
 @pytest.mark.parametrize("amount", [Decimal("1E+12"), Decimal("1E-19"), Decimal("NaN")])
 def test_flow_rejects_out_of_bounds(amount: Decimal) -> None:
     with pytest.raises(DataError, match="montant"):
@@ -113,32 +108,6 @@ def test_unicode_note(tmp_path: Path) -> None:
 
 
 # --- cas d'erreur ------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "text",
-    [
-        "0",
-        "0.00",
-        "-5",
-        "+5",
-        "abc",
-        "NaN",
-        "Infinity",
-        "",
-        " 5",
-        "5.",
-        ".5",
-        "1,5",
-        "1e2",
-        "1e999999999999",  # Decimal le juge fini : refusé par la notation
-        "1000000000000",  # 13 chiffres : ≥ 10¹²
-        "0.0000000000000000001",  # 19 décimales
-    ],
-)
-def test_bad_amounts(text: str) -> None:
-    with pytest.raises(DataError, match="montant"):
-        parse_amount(text)
 
 
 @pytest.mark.parametrize(

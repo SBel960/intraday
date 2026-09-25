@@ -35,41 +35,13 @@ from typing import Literal, cast
 
 from qlab.core.cli import Context, run_command
 from qlab.core.errors import DataError
+from qlab.core.money import check_amount, format_amount, parse_amount
 from qlab.core.timeutils import date_to_ms, ms_to_iso, now_ms
 
 FlowKind = Literal["deposit", "withdrawal"]
 KINDS: tuple[FlowKind, ...] = ("deposit", "withdrawal")
 _FIELDS = frozenset({"ts_ms", "kind", "amount_quote", "note", "amount_fiat", "fiat"})
 _FIAT_RE = re.compile(r"^[A-Z]{3}$")  # code ISO 4217
-
-
-MAX_INT_DIGITS = 12  # < 10¹² en devise de cotation : au-delà, c'est une faute de frappe
-MAX_DECIMALS = 18
-_AMOUNT_RE = re.compile(rf"^\d{{1,{MAX_INT_DIGITS}}}(\.\d{{1,{MAX_DECIMALS}}})?$")
-
-
-def check_amount(amount: Decimal) -> Decimal:
-    """Vérifie un montant : fini, > 0, < 10¹², au plus 18 décimales ; sinon ``DataError``."""
-    if not amount.is_finite() or amount <= 0:
-        raise DataError(f"montant doit être fini et > 0 : {amount}")
-    if amount.adjusted() >= MAX_INT_DIGITS:
-        raise DataError(f"montant trop grand (≥ 10^{MAX_INT_DIGITS}) : {amount}")
-    exponent = amount.as_tuple().exponent
-    if isinstance(exponent, int) and exponent < -MAX_DECIMALS:
-        raise DataError(f"montant avec plus de {MAX_DECIMALS} décimales : {amount}")
-    return amount
-
-
-def parse_amount(text: str) -> Decimal:
-    """Montant en notation décimale simple (``50``, ``12.34`` ; ni signe ni exposant)."""
-    if not _AMOUNT_RE.match(text):
-        raise DataError(f"montant illisible (attendu ex. 50 ou 12.34) : {text!r}")
-    return check_amount(Decimal(text))
-
-
-def format_amount(amount: Decimal) -> str:
-    """Notation décimale, jamais scientifique : ``0.00000001`` et non ``1E-8``."""
-    return format(amount, "f")
 
 
 @dataclass(frozen=True, slots=True)
