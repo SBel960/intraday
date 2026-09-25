@@ -109,7 +109,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | # | Phase | Fichier | Statut |
 |---|---|---|---|
 | 1 | 0 · Socle | `core/config.py` (+ `pyproject.toml`, `config/*.yaml`, `conftest.py`) | validé |
-| 2 | 0 · Socle | `core/timeutils.py` | livré |
+| 2 | 0 · Socle | `core/timeutils.py` | validé |
 | 3 | 0 · Socle | `core/jsonlog.py` | à faire |
 | 4 | 0 · Socle | `core/hashing.py` | à faire |
 | 5 | 0 · Socle | `core/ledger.py` | à faire |
