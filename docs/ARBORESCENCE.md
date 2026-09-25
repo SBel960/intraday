@@ -257,6 +257,17 @@ Attaque des modules validés, hors code du projet : fuzz contre des références
 
 Mineur : demi-caractère UTF-16 isolé ⇒ message clair (`jsonlog`, `ledger`).
 
+## Connexions HTTP persistantes : testées, non retenues (2026-09-26)
+
+Idée : réutiliser la connexion (keep-alive) pour économiser une poignée de main TLS par fichier lors des ~318 000 téléchargements d'archives. Mesure sur data.binance.vision (CloudFront, fichiers jamais en cache, origine à Tokyo), mêmes fichiers, méthodes en alternance, `TCP_NODELAY` actif :
+
+| Méthode | Médiane par requête |
+|---|---|
+| nouvelle connexion à chaque requête (poignée TLS comprise) | **272 ms** |
+| connexion réutilisée | 687 ms |
+
+Réutiliser la connexion **ralentit** chaque requête d'environ 400 ms sur ce serveur (reproduit 4 fois, avec `urllib` et avec `http.client`). `core/http.py` garde donc une connexion par requête ; le débit s'obtient par le nombre de téléchargements simultanés (`archives.download_workers`). À retester seulement si le serveur change.
+
 ## Estimation préliminaire du gate (2026-09-25, jetable, hors code du projet)
 
 Bougies 1 min d'août 2026 (`data.binance.vision`) et spreads `bookTicker` échantillonnés 1/s pendant 120 s. Frais VIP 0 : 0,1 % par jambe. Coût aller-retour taker `c = 2f + s̃` ; le spread vaut 1 tick sur les six paires, donc `c ≈ 0,20 %` (0,15 % avec la remise BNB).
