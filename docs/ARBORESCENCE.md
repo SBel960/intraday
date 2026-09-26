@@ -200,7 +200,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 31 | 2 · Recherche | `research/stats.py` | validé |
 | 32 | 2 · Recherche | `research/bootstrap.py` | validé |
 | 33 | 2 · Recherche | `research/cv.py` | validé |
-| 34 | 2 · Recherche | `research/ic.py` (remonté de l'intraday ; version transversale) | à faire |
+| 34 | 2 · Recherche | `research/ic.py` (remonté de l'intraday ; version transversale) | validé |
 | 35 | 2 · Recherche | `research/report.py` | à faire |
 | 36 | 3 · Long terme | `longterm/klines.py` | à faire |
 | 37 | 3 · Long terme | `longterm/universe.py` | à faire |
