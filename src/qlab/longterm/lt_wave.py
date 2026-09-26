@@ -105,7 +105,7 @@ def first_decision(weights: pl.DataFrame) -> int:
     (ex. un an de financement) est exclue de l'évaluation, pour elle comme pour ses références
     (le rendement d'indice t va du jour t au jour t + 1 : il porte la première exécution)."""
     invested = weights.select(pl.sum_horizontal(pl.exclude(sg.DATE)) > 0)[:, 0].to_numpy()
-    return int(invested.argmax()) if invested.any() else weights.height - 1
+    return int(invested.argmax()) if invested.any() else 0  # jamais investi : toute la période
 
 
 def _criteria(config: QlabConfig) -> research_report.Criteria:

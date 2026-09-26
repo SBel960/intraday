@@ -45,8 +45,10 @@ def _setup(config_dir: Path) -> lt_wave.Setup:
     rng = np.random.default_rng(1)
     fund = pl.DataFrame({DATE: dates, "funding_1d": rng.normal(0.0003, 0.0002, DAYS)})
     breadth = pl.DataFrame({DATE: dates, "breadth": rng.uniform(0, 1, DAYS)})
+    volumes = closes.with_columns(pl.exclude(DATE) * 0 + 1e6)
+    bases = {s: s.removesuffix("USDT") for s in TRADE}
     market = strategies.Market(
-        closes, fund, {50: breadth, 100: breadth}, 365, config.longterm.signals
+        closes, volumes, fund, {50: breadth, 100: breadth}, 365, config.longterm.signals, bases
     )
     rules = lt_backtest.pair_rules(config, snapshot, {})
     return lt_wave.Setup(config, snapshot, market, closes, rules, config.base.capital_tiers[1])
@@ -61,16 +63,17 @@ def test_wave_records_every_backtested_trial_before_judging(
     registry = TrialRegistry(tmp_path / "trials.jsonl")
     body = lt_wave.run_wave(_setup(config_dir), FICHES, registry)
     gate_lines = [line for line in body.splitlines() if line.startswith("- lt_")]
-    assert len(gate_lines) == 17
+    assert len(gate_lines) == 25  # vagues 1 et 2 (hors lt_xs_momentum_eur)
     kept = [line for line in gate_lines if " : testée (" in line]
     assert kept and registry.n_trials("longterm") == len(kept)
     assert f"N = {len(kept)} essais dans le volet" in body
     assert body.count("**Verdict :") == len(kept)
     rows = body.splitlines()
-    assert sum(r.startswith("| Buy & hold |") for r in rows) == len(kept)
-    assert sum(r.startswith("| DCA |") for r in rows) == len(kept)
+    flat = body.count("(non évaluable :")  # ex. choc de volume jamais déclenché ici
+    assert sum(r.startswith("| Buy & hold |") for r in rows) + flat == len(kept)
+    assert sum(r.startswith("| DCA |") for r in rows) + flat == len(kept)
     assert "Contrôle anti-fuite du pipeline" in body and ") : ok" in body
-    assert body.count("(chauffe exclue)") == len(kept) and "non évaluable" not in body
+    assert body.count("(chauffe exclue)") + flat == len(kept)
     assert "Filtres d'ordre (pas, minimum) du snapshot actuel" in body
 
 
@@ -131,7 +134,7 @@ def test_never_invested_trial_counts_with_zero_sharpe() -> None:
 
 def test_first_decision_skips_the_warm_up() -> None:
     """Cash les jours 0 à 2 (signal pas encore défini), investi dès le jour 3 ; jamais
-    investi ⇒ dernier jour (fenêtre vide)."""
+    investi ⇒ toute la période (évalué à plat, Sharpe 0 au registre)."""
     w = pl.DataFrame({DATE: [T0 + i * D for i in range(5)], "A": [0.0, 0.0, 0.0, 0.5, 0.0]})
     assert lt_wave.first_decision(w) == 3
-    assert lt_wave.first_decision(w.with_columns(A=pl.lit(0.0))) == 4
+    assert lt_wave.first_decision(w.with_columns(A=pl.lit(0.0))) == 0

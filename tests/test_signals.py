@@ -113,6 +113,37 @@ def test_turn_of_month_by_hand() -> None:
     assert _w(w, "A") == [0, 1, 1, 1, 1, 1, 1, 0, 0]
 
 
+def test_relative_rotation_by_hand() -> None:
+    """L = 2. Jour 2 : B ln 2, C 0 ⇒ moyenne 0,35 > BTC 0 ⇒ B et C à 1/2. Jour 3 : B ln 2,
+    C ln 0,5 ⇒ moyenne 0, pas > 0 ⇒ tout sur BTC. Jours 0-1 : inconnu ⇒ cash."""
+    w = sg.relative_rotation(_panel(BTC=[1, 1, 1, 1], B=[1, 1, 2, 2], C=[1, 1, 1, 0.5]), "BTC", 2)
+    assert w.columns == [sg.DATE, "BTC", "B", "C"]
+    assert _w(w, "BTC") == [0, 0, 0, 1] and _w(w, "B") == [0, 0, 0.5, 0] == _w(w, "C")
+
+
+def test_breakout_by_hand() -> None:
+    """Entrée 2 j, sortie 1 j. Clôtures 1 2 3 2 5 4 1 6 : entrée au jour 2 (3 > 2), sortie
+    au jour 3 (2 < 3), entrée au jour 4 (5 > 3), sortie au jour 5 (4 < 5), entrée au jour 7
+    (6 > 4)."""
+    w = sg.breakout(_panel(A=[1, 2, 3, 2, 5, 4, 1, 6]), 2)
+    assert _w(w, "A") == [0, 0, 1, 0, 1, 0, 0, 1]
+
+
+def test_volume_shock_by_hand() -> None:
+    """Base 3 j, k = 2, détention 2 j. Jour 3 : volume 30 ≥ 2 × 10 et hausse ⇒ investi les
+    jours 3 et 4. Jour 5 : volume 30 mais baisse ⇒ rien."""
+    closes = _panel(A=[1, 1, 1, 2, 2, 1.5, 1.5])
+    volumes = _panel(A=[10, 10, 10, 30, 10, 30, 10])
+    w = sg.volume_shock(closes, volumes, ratio=2, baseline_days=3, hold_days=2)
+    assert _w(w, "A") == [0, 0, 0, 1, 1, 0, 0]
+
+
+def test_near_high_by_hand() -> None:
+    """Fenêtre 3 j, q = 0,8 : jour 2 → 9 ≥ 0,8 × 10 ; jour 3 → 5 < 0,8 × 9 ; jour 4 → 10."""
+    w = sg.near_high(_panel(A=[10, 8, 9, 5, 10]), 0.8, 3)
+    assert _w(w, "A") == [0, 0, 1, 0, 1]
+
+
 Signal = Callable[[pl.DataFrame], pl.DataFrame]
 SIGNALS: dict[str, Signal] = {
     "ts_momentum": lambda c: sg.ts_momentum(c, 5),
@@ -122,6 +153,10 @@ SIGNALS: dict[str, Signal] = {
         c, c.select(sg.DATE, *(pl.col(a).is_not_null() for a in "ABCD")), 6, 2, 2
     ),
     "turn_of_month": lambda c: sg.turn_of_month(c, 1, 3),
+    "relative_rotation": lambda c: sg.relative_rotation(c, "A", 5),
+    "breakout": lambda c: sg.breakout(c, 6),
+    "volume_shock": lambda c: sg.volume_shock(c, c, ratio=1.02, baseline_days=5, hold_days=4),
+    "near_high": lambda c: sg.near_high(c, 0.9, 10),
 }
 
 
@@ -165,6 +200,15 @@ def test_describe() -> None:
         (lambda: sg.market_breadth(_panel(A=[1.0]), _panel(A=[1.0]), 1.5), "min_breadth"),
         (lambda: sg.funding_leverage(_panel(A=[1.0]), _panel(A=[1.0]), 1.0, 3), "quantile"),
         (lambda: sg.turn_of_month(_panel(A=[1.0]), 0, 3), "≥ 1"),
+        (lambda: sg.relative_rotation(_panel(A=[1.0]), "A", 2), "rotation"),
+        (lambda: sg.breakout(_panel(A=[1.0]), 1), "entry_days"),
+        (
+            lambda: sg.volume_shock(
+                _panel(A=[1.0]), _panel(A=[1.0]), ratio=1, baseline_days=3, hold_days=2
+            ),
+            "ratio",
+        ),
+        (lambda: sg.near_high(_panel(A=[1.0]), 1.5, 3), "min_ratio"),
     ],
 )
 def test_errors(call: object, msg: str) -> None:

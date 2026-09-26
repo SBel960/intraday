@@ -179,3 +179,98 @@ def describe(weights: pl.DataFrame) -> str:
         f"{date_str(int(dates.min()))} → {date_str(int(dates.max()))} : exposition moyenne "
         f"{exposure.mean():.2f}, investi {(exposure > 0).mean():.0%} des jours"
     )
+
+
+# --- vague 2 -----------------------------------------------------------------------------
+
+
+def relative_rotation(closes: pl.DataFrame, anchor: str, lookback_days: int) -> pl.DataFrame:
+    """``lt_btc_alt_rotation`` : les autres actifs (poids égaux entre présents) si leur
+    rendement log moyen sur L jours dépasse celui de ``anchor`` (BTC), sinon tout sur
+    ``anchor``. Rendement inconnu (début de série) ⇒ cash."""
+    ret = log_return(closes, lookback_days)
+    others = [a for a in _assets(closes) if a != anchor]
+    if anchor not in closes.columns or not others:
+        raise DataError(f"rotation : {anchor} et au moins un autre actif attendus")
+    mean_others = pl.mean_horizontal(*others)
+    rotate = mean_others > pl.col(anchor)
+    known = mean_others.is_not_null() & pl.col(anchor).is_not_null()
+    present = pl.sum_horizontal(pl.col(a).is_not_null().cast(pl.Float64) for a in others)
+    alt_weight = [
+        pl.when(known & rotate & pl.col(a).is_not_null()).then(1 / present).otherwise(0.0).alias(a)
+        for a in others
+    ]
+    btc_weight = pl.when(known & ~rotate).then(1.0).otherwise(0.0).alias(anchor)
+    return ret.select(DATE, btc_weight, *alt_weight).select(DATE, *_assets(closes))
+
+
+def _hold_flags(entry: np.ndarray, exit_: np.ndarray) -> np.ndarray:
+    """État « investi » d'un actif : entre à ``entry``, sort à ``exit_`` (sortie prioritaire)."""
+    held, state = np.zeros(entry.size, dtype=bool), False
+    for t in range(entry.size):
+        state = False if exit_[t] else state or bool(entry[t])
+        held[t] = state
+    return held
+
+
+def breakout(closes: pl.DataFrame, entry_days: int) -> pl.DataFrame:
+    """``lt_breakout`` : poche de 1/N investie après une clôture au-dessus du plus haut des
+    ``entry_days`` jours **précédents**, jusqu'à une clôture sous le plus bas des
+    ``entry_days // 2`` jours précédents (fenêtres complètes exigées)."""
+    _check_days(entry_days=entry_days)
+    if entry_days < 2:
+        raise DataError("entry_days ≥ 2 attendu (sortie sur la moitié de la fenêtre)")
+    exit_days = entry_days // 2
+    flags = {}
+    for a in _assets(closes):
+        c = pl.col(a)
+        high = c.shift(1).rolling_max(entry_days, min_samples=entry_days)
+        low = c.shift(1).rolling_min(exit_days, min_samples=exit_days)
+        sig = closes.select(
+            (c > high).fill_null(False).alias("entry"), (c < low).fill_null(False).alias("exit")
+        )
+        flags[a] = _hold_flags(sig[:, 0].to_numpy(), sig[:, 1].to_numpy())
+    return _equal_sleeves(closes, pl.DataFrame({DATE: closes[DATE], **flags}))
+
+
+def volume_shock(
+    closes: pl.DataFrame,
+    volumes: pl.DataFrame,
+    *,
+    ratio: float,
+    baseline_days: int,
+    hold_days: int,
+) -> pl.DataFrame:
+    """``lt_volume_shock`` : poche de 1/N investie ``hold_days`` jours après un jour haussier
+    dont le volume ≥ ``ratio`` × médiane des ``baseline_days`` jours précédents ; un nouveau
+    choc prolonge la détention."""
+    _check_days(baseline_days=baseline_days, hold_days=hold_days)
+    if ratio <= 1 or volumes[DATE].to_list() != closes[DATE].to_list():
+        raise DataError("ratio > 1 et volumes sur la même grille que les prix attendus")
+    flags = {}
+    for a in _assets(closes):
+        base = pl.col(a).shift(1).rolling_median(baseline_days, min_samples=baseline_days)
+        shock = volumes.select((pl.col(a) >= ratio * base).fill_null(False))[:, 0].to_numpy()
+        up = closes.select((pl.col(a) > pl.col(a).shift(1)).fill_null(False))[:, 0].to_numpy()
+        started = np.flatnonzero(shock & up)
+        held = np.zeros(closes.height, dtype=bool)
+        for t in started:
+            held[t : t + hold_days] = True
+        flags[a] = held
+    return _equal_sleeves(closes, pl.DataFrame({DATE: closes[DATE], **flags}))
+
+
+def near_high(closes: pl.DataFrame, min_ratio: float, window_days: int) -> pl.DataFrame:
+    """``lt_near_high`` : poche de 1/N investie si clôture ≥ ``min_ratio`` × plus haut des
+    ``window_days`` derniers jours, jour compris (fenêtre complète exigée ; « 1 an » : le
+    calendrier du marché, fourni par l'appelant)."""
+    _check_days(window_days=window_days)
+    if not 0 < min_ratio <= 1:
+        raise DataError("min_ratio dans ]0, 1] attendu")
+    near = [
+        (pl.col(a) >= min_ratio * pl.col(a).rolling_max(window_days, min_samples=window_days))
+        .fill_null(False)
+        .alias(a)
+        for a in _assets(closes)
+    ]
+    return _equal_sleeves(closes, closes.select(DATE, *near))

@@ -50,7 +50,14 @@ def test_policies_follow_fiche_horizons() -> None:
 
 def test_multi_asset_fiches_are_flagged() -> None:
     flagged = {k for k, s in st.REGISTRY.items() if s.multi_asset}
-    assert flagged == {"lt_xs_momentum", "lt_low_volatility"}
+    assert flagged == {"lt_xs_momentum", "lt_low_volatility", "lt_btc_alt_rotation"}
+
+
+def test_rotation_needs_a_btc_pair() -> None:
+    market = _market()
+    no_btc = dataclasses.replace(market, bases=dict.fromkeys(TRADE, "ALT"))
+    with pytest.raises(DataError, match="aucune paire tradée sur BTC"):
+        st.strategy_for(_fiche("lt_btc_alt_rotation")).build(no_btc, {"lookback_days": 30.0})
 
 
 def test_trial_name_and_integer_days() -> None:
@@ -70,11 +77,13 @@ def _market(days: int = 420) -> st.Market:
     fund = pl.DataFrame({DATE: dates, "funding_1d": rng.normal(0.0003, 0.0002, days)})
     breadth = pl.DataFrame({DATE: dates, "breadth": rng.uniform(0, 1, days)})
     cfg = load_config(Path(__file__).resolve().parent.parent / "config").longterm.signals
-    return st.Market(closes, fund, {50: breadth, 100: breadth}, 365, cfg)
+    volumes = closes.with_columns(pl.exclude(DATE).abs() * 1e6)
+    bases = {s: s.removesuffix("USDT") for s in TRADE}
+    return st.Market(closes, volumes, fund, {50: breadth, 100: breadth}, 365, cfg, bases)
 
 
 def test_every_trial_builds_valid_weights() -> None:
-    """Les 17 essais de la vague 1 : même grille que les prix, poids ≥ 0, somme ≤ 1."""
+    """Les 25 essais (vague 1 et 4 fiches de la vague 2) : même grille, poids ≥ 0, somme ≤ 1."""
     market, n = _market(), 0
     for h in FICHES:
         for params in h.grid():
@@ -83,7 +92,7 @@ def test_every_trial_builds_valid_weights() -> None:
             x = w.drop(DATE).to_numpy()
             assert (x >= 0).all() and (x.sum(axis=1) <= 1 + 1e-12).all(), st.trial_name(h, params)
             n += 1
-    assert n == 17
+    assert n == 25
 
 
 def _write_klines(paths: DataPaths, symbol: str, closes: np.ndarray, volume: float) -> None:
@@ -122,6 +131,6 @@ def test_costs_command_end_to_end(config_dir: Path, capsys: pytest.CaptureFixtur
     out = capsys.readouterr().out
     report = next((paths.reports).glob("lt_costs_*.md")).read_text()
     assert report.startswith("# Gate de coûts long terme")
-    assert report.count("| lt_") == 17 * 2  # 17 essais × 2 paliers (config de test)
+    assert report.count("| lt_") == 25 * 2  # 25 essais × 2 paliers (config de test)
     assert "lt_market_breadth · ma_days=100, min_breadth=0.5 | t1 |" in report
     assert "Rapport :" in out

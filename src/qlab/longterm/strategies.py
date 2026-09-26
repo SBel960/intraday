@@ -41,10 +41,12 @@ from qlab.research.hypothesis import Hypothesis, load_all
 @dataclass(frozen=True, slots=True)
 class Market:
     closes: pl.DataFrame  # paires tradées, grille journalière (signals.wide)
+    volumes: pl.DataFrame  # volumes en devise de cotation, même grille
     funding: pl.DataFrame  # date_ms, funding_1d (moyenne des contrats des paires tradées)
     breadth: Mapping[int, pl.DataFrame]  # ma_days → date_ms, breadth
     days_per_year: int
     settings: SignalsConfig
+    bases: Mapping[str, str]  # paire → actif de base (exchangeInfo)
 
 
 Params = Mapping[str, float]
@@ -87,6 +89,36 @@ def _turn_of_month(m: Market, p: Params) -> pl.DataFrame:
     return sg.turn_of_month(m.closes, _days(p, "pre_days"), _days(p, "post_days"))
 
 
+# Constantes écrites dans les fiches de la vague 2 (hypotheses/lt_volume_shock.yaml).
+VOLUME_BASELINE_DAYS = 30  # « médiane des 30 jours précédents »
+VOLUME_HOLD_DAYS = 21  # « détention de 3 semaines » (horizon_s de la fiche)
+
+
+def _btc_alt_rotation(m: Market, p: Params) -> pl.DataFrame:
+    anchor = next((s for s, b in m.bases.items() if b == market_state.BTC), None)
+    if anchor is None:
+        raise DataError("rotation : aucune paire tradée sur BTC")
+    return sg.relative_rotation(m.closes, anchor, _days(p, "lookback_days"))
+
+
+def _breakout(m: Market, p: Params) -> pl.DataFrame:
+    return sg.breakout(m.closes, _days(p, "entry_days"))
+
+
+def _volume_shock(m: Market, p: Params) -> pl.DataFrame:
+    return sg.volume_shock(
+        m.closes,
+        m.volumes,
+        ratio=p["volume_ratio"],
+        baseline_days=VOLUME_BASELINE_DAYS,
+        hold_days=VOLUME_HOLD_DAYS,
+    )
+
+
+def _near_high(m: Market, p: Params) -> pl.DataFrame:
+    return sg.near_high(m.closes, p["min_ratio"], m.days_per_year)
+
+
 @dataclass(frozen=True, slots=True)
 class Strategy:
     """``multi_asset`` : la fiche répartit entre plusieurs actifs (sur un seul, elle se réduit
@@ -105,6 +137,10 @@ REGISTRY: dict[str, Strategy] = {
     "lt_funding_leverage": Strategy(_funding_leverage),
     "lt_market_breadth": Strategy(_market_breadth),
     "lt_turn_of_month": Strategy(_turn_of_month, rebalance_days=1),
+    "lt_btc_alt_rotation": Strategy(_btc_alt_rotation, multi_asset=True),
+    "lt_breakout": Strategy(_breakout),
+    "lt_volume_shock": Strategy(_volume_shock, rebalance_days=1),  # le choc fixe l'entrée
+    "lt_near_high": Strategy(_near_high),
 }
 
 
@@ -134,8 +170,10 @@ def load_market(
 ) -> Market:
     """Charge les données de toutes les fiches (largeur seulement pour ``ma_days``)."""
     trade = config.base.symbols.trade
-    closes = sg.wide({s: klines.load(paths, universe.INTERVAL, s) for s in trade})
+    bars = {s: klines.load(paths, universe.INTERVAL, s) for s in trade}
+    closes, volumes = sg.wide(bars), sg.wide(bars, "volume_quote")
     known = snapshot.by_symbol()
+    bases = {s: str(known[s]["baseAsset"]) for s in trade if s in known}
     contracts = [f"{known[s]['baseAsset']}USDT" for s in trade if s in known]
     rates = pl.concat([funding.daily(funding.load(paths, c)) for c in contracts])
     mean_rate = rates.group_by("date_ms").agg(pl.col("funding_1d").mean()).sort("date_ms")
@@ -145,7 +183,7 @@ def load_market(
         state = market_state.market_state(paths, members, ma_days)
         breadth = {n: state.select("date_ms", breadth=f"breadth_{n}") for n in ma_days}
     days = config.base.exchange(exchange).trading_days_per_year
-    return Market(closes, mean_rate, breadth, days, config.longterm.signals)
+    return Market(closes, volumes, mean_rate, breadth, days, config.longterm.signals, bases)
 
 
 def breadth_lengths(hypotheses: Sequence[Hypothesis]) -> list[int]:
