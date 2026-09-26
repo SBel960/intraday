@@ -209,6 +209,7 @@ def test_data_root_symlink_to_mnt_rejected(config_dir: Path, tmp_path: Path) -> 
         (["archives", "download_workers"], 0, r"download_workers doit être dans \[1, 32\]"),
         (["archives", "download_workers"], 33, "download_workers"),
         (["archives", "list_workers"], 65, "list_workers"),
+        (["secrets_file"], "relatif/.env", "secrets_file doit être un chemin absolu"),
         (["archives", "binance_vision_list_url"], "http://x", "https://"),
         (["archives", "futures_metrics_symbols"], ["BTCUSDT", "BTCUSDT"], "doublons"),
         (["archives", "futures_metrics_symbols"], ["btcusdt"], "symbole invalide"),

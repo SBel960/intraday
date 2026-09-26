@@ -88,3 +88,57 @@ class FakeVision:
             raise self.failing[key]
         self.downloads.append(key)
         return self.content[key]
+
+
+# --- réponses exchangeInfo construites à la main ------------------------------------------
+
+T0 = 1_704_067_200_000  # 2024-01-01T00:00:00Z
+EXCHANGE_INFO_URL = "https://api.binance.com/api/v3/exchangeInfo"
+FALLBACK_FEES: dict[str, object] = {
+    "origin": "config",
+    "maker_frac": 0.001,
+    "taker_frac": 0.001,
+    "bnb_discount_frac": 0.25,
+    "pay_in_bnb": False,
+    "effective_maker_frac": 0.001,
+    "effective_taker_frac": 0.001,
+}
+
+
+def binance_filters(
+    tick: str = "0.01", step: str = "0.00001", min_notional: str = "5"
+) -> list[dict[str, object]]:
+    """Filtres PRICE_FILTER / LOT_SIZE / NOTIONAL au format exchangeInfo."""
+    return [
+        {"filterType": "PRICE_FILTER", "minPrice": tick, "maxPrice": "1000000", "tickSize": tick},
+        {"filterType": "LOT_SIZE", "minQty": step, "maxQty": "9000", "stepSize": step},
+        {
+            "filterType": "NOTIONAL",
+            "minNotional": min_notional,
+            "applyMinToMarket": True,
+            "maxNotional": "9000000",
+            "applyMaxToMarket": False,
+        },
+    ]
+
+
+def binance_symbol(symbol: str, quote: str, status: str = "TRADING") -> dict[str, object]:
+    """Une paire (``BTCEUR``, cotée ``EUR``) avec les filtres par défaut."""
+    return {
+        "symbol": symbol,
+        "status": status,
+        "baseAsset": symbol.removesuffix(quote),
+        "quoteAsset": quote,
+        "filters": binance_filters(),
+    }
+
+
+def exchange_info(symbols: list[dict[str, object]], server_time: int = T0) -> dict[str, object]:
+    """Réponse exchangeInfo minimale contenant ``symbols``."""
+    return {
+        "timezone": "UTC",
+        "serverTime": server_time,
+        "rateLimits": [],
+        "exchangeFilters": [],
+        "symbols": symbols,
+    }

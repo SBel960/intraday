@@ -18,11 +18,19 @@ from __future__ import annotations
 
 import sys
 import traceback
-from collections.abc import Callable
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Mapping
+from typing import Any, Protocol
 
-if TYPE_CHECKING:
-    from qlab.core.jsonlog import JsonLog
+
+class Journal(Protocol):
+    """Ce dont ``run_cli`` a besoin pour tracer un échec (``core/jsonlog.JsonLog`` convient).
+
+    Contrat plutôt qu'import : le module le plus bas du socle ne dépend pas du journal.
+    """
+
+    def error(self, kind: str, data: Mapping[str, Any] | None = None) -> None: ...
+    def warning(self, kind: str, data: Mapping[str, Any] | None = None) -> None: ...
+
 
 EXIT_OK = 0
 EXIT_EXPECTED_ERROR = 1
@@ -42,7 +50,7 @@ class ExchangeError(QlabError):
     """Réponse d'échange inutilisable : statut HTTP, limite de requêtes, format inattendu."""
 
 
-def run_cli(entry: Callable[[], int], *, journal: JsonLog | None = None) -> int:
+def run_cli(entry: Callable[[], int], *, journal: Journal | None = None) -> int:
     """Exécute ``entry`` et convertit l'issue en code de sortie (0, 1 ou 2).
 
     ``entry`` renvoie son propre code en cas de succès. Une ``QlabError`` ou une ``OSError``

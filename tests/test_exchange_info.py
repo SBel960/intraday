@@ -9,12 +9,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fakes import binance_symbol, exchange_info
 
-from qlab.core.config import load_base
 from qlab.core.errors import DataError, ExchangeError
 from qlab.core.jsonlog import read_log
 from qlab.exchange import exchange_info as ei
-from qlab.exchange.exchange_info import clock_offset, fees_record, fetch_exchange_info, is_due
+from qlab.exchange.exchange_info import clock_offset, fetch_exchange_info, is_due
 from qlab.exchange.snapshots import Snapshot
 
 T = 1_704_067_200_000  # 2024-01-01T00:00:00Z
@@ -22,44 +22,16 @@ HOUR, DAY = 3_600_000, 86_400_000
 URL = "https://api.binance.com/api/v3/exchangeInfo"
 
 
-def _filters() -> list[Any]:
-    return [
-        {
-            "filterType": "PRICE_FILTER",
-            "minPrice": "0.01",
-            "maxPrice": "1000000",
-            "tickSize": "0.01",
-        },
-        {"filterType": "LOT_SIZE", "minQty": "0.00001", "maxQty": "9000", "stepSize": "0.00001"},
-        {
-            "filterType": "NOTIONAL",
-            "minNotional": "5",
-            "applyMinToMarket": True,
-            "maxNotional": "9000000",
-            "applyMaxToMarket": False,
-        },
-    ]
-
-
 def _info(server_time: int = T, btcusdt_status: str = "TRADING") -> dict[str, Any]:
-    def sym(name: str, base: str, quote: str, status: str = "TRADING") -> dict[str, Any]:
-        return {
-            "symbol": name,
-            "status": status,
-            "baseAsset": base,
-            "quoteAsset": quote,
-            "filters": _filters(),
-        }
-
-    return {
-        "serverTime": server_time,
-        "symbols": [
-            sym("BTCUSDT", "BTC", "USDT", btcusdt_status),
-            sym("ETHUSDT", "ETH", "USDT"),
-            sym("BTCEUR", "BTC", "EUR"),
-            sym("OLDUSDT", "OLD", "USDT", "BREAK"),
+    return exchange_info(
+        [
+            binance_symbol("BTCUSDT", "USDT", btcusdt_status),
+            binance_symbol("ETHUSDT", "USDT"),
+            binance_symbol("BTCEUR", "EUR"),
+            binance_symbol("OLDUSDT", "USDT", "BREAK"),
         ],
-    }
+        server_time,
+    )
 
 
 class _Resp:
@@ -152,11 +124,6 @@ def test_measure_clock_by_hand() -> None:
 
     c = ei.measure_clock(URL, notify=lambda _: None, opener=open_url, clock_ms=lambda: next(reads))
     assert (c.offset_ms, c.uncertainty_ms) == (900, 100)
-
-
-def test_fees_record_from_config(config_dir: Path) -> None:
-    fees = fees_record(load_base(config_dir / "base.yaml").exchange("binance"))
-    assert fees["origin"] == "config" and fees["effective_taker_frac"] == 0.001
 
 
 @pytest.mark.parametrize(
@@ -270,7 +237,7 @@ def test_show_symbol(
     assert ei.main(["--config", str(config_dir), "show", "--symbol", "BTCEUR"]) == 0
     out = capsys.readouterr().out
     assert "BTCEUR : tick 0.01, pas 0.00001, minNotional 5" in out
-    assert "Frais (config) : maker 0.1000%, taker 0.1000%" in out
+    assert "Frais de repli (config) : maker 0.1000%, taker 0.1000%" in out
 
 
 def test_cli_errors(

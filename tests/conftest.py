@@ -93,7 +93,11 @@ def config_dir(tmp_path: Path) -> Path:
     """Écrit base/intraday/longterm.yaml valides ; la racine des données est ``tmp_path/data``."""
     cfg = tmp_path / "config"
     cfg.mkdir()
-    base = {**BASE, "data": {**BASE["data"], "root": str(tmp_path / "data")}}  # type: ignore[dict-item]
+    base = {
+        **BASE,
+        "data": {**BASE["data"], "root": str(tmp_path / "data")},  # type: ignore[dict-item]
+        "secrets_file": str(tmp_path / "secrets.env"),  # absent par défaut : frais de repli
+    }
     for name, content in (("base", base), ("intraday", INTRADAY), ("longterm", LONGTERM)):
         (cfg / f"{name}.yaml").write_text(yaml.safe_dump(content), encoding="utf-8")
     return cfg

@@ -167,3 +167,30 @@ def test_documented_in_arborescence() -> None:
     doc = (ROOT / "docs" / "ARBORESCENCE.md").read_text(encoding="utf-8")
     missing = [_rel(p) for p in MODULES if f"── {p.name}" not in doc]
     assert not missing, f"modules absents de ARBORESCENCE.md : {missing}"
+
+
+def test_no_import_cycles() -> None:
+    """Aucun cycle d'imports entre modules, imports « pour le typage » compris
+    (``errors`` → ``jsonlog`` → ``timeutils`` → ``errors`` en était un, audit 2026-09-26)."""
+    graph: dict[str, set[str]] = {}
+    for path in MODULES:
+        module = "qlab." + _rel(path).removesuffix(".py").replace("/", ".")
+        graph[module] = {
+            name
+            for name in _imports(_tree(path))
+            if name.startswith("qlab.") and name.count(".") >= 2
+        }
+    state: dict[str, int] = {}  # 1 = en cours d'exploration, 2 = terminé
+
+    def visit(node: str, trail: list[str]) -> None:
+        state[node] = 1
+        for dep in graph.get(node, ()):
+            if state.get(dep) == 1:
+                pytest.fail("cycle d'imports : " + " → ".join([*trail, dep]))
+            if dep not in state:
+                visit(dep, [*trail, dep])
+        state[node] = 2
+
+    for module in sorted(graph):
+        if module not in state:
+            visit(module, [module])

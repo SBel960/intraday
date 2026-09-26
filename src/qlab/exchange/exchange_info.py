@@ -30,6 +30,7 @@ from qlab.core.cli import Context, run_command
 from qlab.core.config import ExchangeConfig
 from qlab.core.errors import DataError, ExchangeError
 from qlab.core.timeutils import ms_to_iso, now_ms
+from qlab.exchange.fees import account_rates, describe, effective_by_symbol, fees_record
 from qlab.exchange.snapshots import (
     Snapshot,
     SnapshotStore,
@@ -74,20 +75,6 @@ def measure_clock(url: str, *, notify: Callable[[str], None], **http_options: An
     return clock_offset(server_time, result.sent_ms, result.received_ms)
 
 
-def fees_record(exchange: ExchangeConfig) -> dict[str, Any]:
-    """Frais appliqués, en fraction du notionnel ; origine ``config`` (barème de repli)."""
-    f = exchange.fees
-    return {
-        "origin": "config",
-        "maker_frac": f.maker_frac,
-        "taker_frac": f.taker_frac,
-        "bnb_discount_frac": f.bnb_discount_frac,
-        "pay_in_bnb": f.pay_in_bnb,
-        "effective_maker_frac": f.effective_maker_frac,
-        "effective_taker_frac": f.effective_taker_frac,
-    }
-
-
 def fetch_exchange_info(
     url: str, *, notify: Callable[[str], None], **http_options: Any
 ) -> tuple[dict[str, Any], http.HttpResult]:
@@ -118,13 +105,11 @@ def _summary(snap: Snapshot, versions: int) -> str:
     for s in trading:
         quotes[s["quoteAsset"]] = quotes.get(s["quoteAsset"], 0) + 1
     top = ", ".join(f"{q} {n}" for q, n in sorted(quotes.items(), key=lambda x: -x[1])[:6])
-    fees = snap.fees
-    return (
+    head = (
         f"{ms_to_iso(snap.fetched_ms)} | {len(snap.symbols(None))} paires, {len(trading)} en "
-        f"cotation ({top}) | {versions} version(s)\n"
-        f"Frais ({fees['origin']}) : maker {fees['effective_maker_frac']:.4%}, "
-        f"taker {fees['effective_taker_frac']:.4%}"
+        f"cotation ({top}) | {versions} version(s)"
     )
+    return "\n".join([head, *describe(snap.fees)])
 
 
 def _check_clock(ctx: Context, exchange: ExchangeConfig, clock: ClockOffset) -> None:
@@ -189,14 +174,26 @@ def _fetch(ctx: Context, exchange: ExchangeConfig, store: SnapshotStore) -> Snap
         ctx.journal.info("fetch.skipped", {"latest": latest.path.name})
         return latest
 
-    def notify(message: str) -> None:
-        print(message, file=sys.stderr, flush=True)
-        ctx.journal.warning("fetch.retry", {"message": message})
-
-    _check_clock(ctx, exchange, measure_clock(exchange.rest_url + TIME_ENDPOINT, notify=notify))
+    notify = ctx.notify
+    clock = measure_clock(exchange.rest_url + TIME_ENDPOINT, notify=notify)
+    _check_clock(ctx, exchange, clock)
     url = exchange.rest_url + ENDPOINT
     info, result = fetch_exchange_info(url, notify=notify)
-    saved = store.save(info, fees_record(exchange), now_ms(), url)
+    rates = account_rates(
+        ctx.config.base.secrets_file,
+        exchange,
+        ctx.config.base.symbols.trade,
+        server_time_ms=lambda: now_ms() + clock.offset_ms,
+        notify=notify,
+    )
+    if rates is None:
+        print("Pas de clé d'API : frais de repli de la config")
+    else:
+        effective = effective_by_symbol(rates, exchange)
+        ctx.journal.info(
+            "fees.account", {s: {"maker": f.maker, "taker": f.taker} for s, f in effective.items()}
+        )
+    saved = store.save(info, fees_record(exchange, rates), now_ms(), url)
     ctx.journal.info(
         "fetch.ok",
         {

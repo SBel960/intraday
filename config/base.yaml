@@ -58,3 +58,7 @@ capital_tiers:
   - name: t2
     capital_quote: 1000
     max_drawdown_frac: 0.20
+
+# Clés d'API (lecture seule), hors dépôt et chmod 600 : BINANCE_API_KEY,
+# BINANCE_PRIVATE_KEY_PATH (clé Ed25519 privée, jamais transmise). Absent ⇒ frais de repli.
+secrets_file: /home/bsouf/intraday/.env

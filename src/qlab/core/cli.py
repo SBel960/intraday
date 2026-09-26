@@ -14,6 +14,7 @@ Exception : ``core/config.py`` garde sa propre commande (il ne peut pas importer
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +33,11 @@ class Context:
     paths: DataPaths
     journal: JsonLog
     args: argparse.Namespace
+
+    def notify(self, message: str) -> None:
+        """Message d'attente (réseau, limite de requêtes) : affiché et journalisé."""
+        print(message, file=sys.stderr, flush=True)
+        self.journal.warning("fetch.retry", {"message": message})
 
 
 def run_command(

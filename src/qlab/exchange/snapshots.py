@@ -5,10 +5,11 @@ fait ~17 Mo, ~110 Ko compressée). Un snapshot contient ::
 
     {"source", "fetched_ms", "url", "content_hash", "fees": {...}, "exchange_info": {...}}
 
-- **Versionnement** : un fichier n'est écrit que si le contenu change (SHA-256 de la réponse
-  sans ``serverTime``, qui change à chaque appel, et des frais). Écriture atomique (fichier
-  temporaire, ``fsync``, ``os.replace``), jamais d'écrasement. Le hash est revérifié à la
-  lecture : un fichier modifié après coup est détecté.
+- **Versionnement** : un fichier n'est écrit que si le contenu change (``change_key`` :
+  réponse sans ``serverTime`` ni champs recalculés en continu par Binance, + frais). Écriture
+  atomique (fichier temporaire, ``fsync``, ``os.replace``), jamais d'écrasement. L'empreinte
+  d'intégrité (``content_hash``, tout le contenu) est revérifiée à la lecture : un fichier
+  modifié après coup est détecté.
 - **Point-in-time** : ``snapshot_at(ts_ms)`` rend la version en vigueur à ``ts_ms``. Avant la
   première, on applique la première et on le signale (``exchangeInfo`` n'a pas d'historique).
 - **Différences** : ``diff_snapshots`` liste paires ajoutées ou disparues, changements de statut
@@ -64,6 +65,32 @@ def content_hash(info: dict[str, Any], fees: dict[str, Any]) -> str:
         ensure_ascii=False,
     )
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+# Champs que Binance recalcule en continu (d'après les volumes) : ils ne décident ni d'une
+# nouvelle version ni d'une alerte. La valeur stockée est celle du dernier snapshot écrit
+# (ex. MARKET_LOT_SIZE.maxQty ≈ 6 BTC : sans effet à notre échelle).
+VOLATILE_FILTER_FIELDS: dict[str, frozenset[str]] = {"MARKET_LOT_SIZE": frozenset({"maxQty"})}
+
+
+def stable_filters(filters: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Filtres sans leurs champs volatils."""
+    out = []
+    for f in filters:
+        volatile = VOLATILE_FILTER_FIELDS.get(str(f.get("filterType")), frozenset())
+        out.append({k: v for k, v in f.items() if k not in volatile})
+    return out
+
+
+def change_key(info: dict[str, Any], fees: dict[str, Any]) -> str:
+    """Empreinte de ce qui compte : réponse sans ``serverTime`` ni champs volatils, + frais.
+
+    Distincte de ``content_hash`` (intégrité du fichier, tout le contenu) : un changement de
+    ``change_key`` seul justifie une nouvelle version.
+    """
+    stable = {k: v for k, v in info.items() if k not in ("serverTime", "symbols")}
+    stable["symbols"] = [{**s, "filters": stable_filters(s["filters"])} for s in info["symbols"]]
+    return content_hash(stable, fees)
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,7 +190,7 @@ class SnapshotStore:
         digest = content_hash(info, fees)
         last = self.latest()
         if last is not None:
-            if last.content_hash == digest:
+            if change_key(last.info, last.fees) == change_key(info, fees):
                 return SaveResult(last, written=False, previous=None)
             if fetched_ms <= last.fetched_ms:
                 raise DataError("snapshot pas plus récent que le dernier enregistré")
@@ -230,7 +257,7 @@ class SnapshotDiff:
 
 
 def diff_snapshots(old: Snapshot, new: Snapshot) -> SnapshotDiff:
-    """Compare deux versions (paires et filtres bruts, frais)."""
+    """Compare deux versions (paires, statuts, filtres hors champs volatils, frais)."""
     before, after = old.by_symbol(), new.by_symbol()
     common = sorted(before.keys() & after.keys())
     return SnapshotDiff(
@@ -241,6 +268,10 @@ def diff_snapshots(old: Snapshot, new: Snapshot) -> SnapshotDiff:
             for s in common
             if before[s]["status"] != after[s]["status"]
         ),
-        filters_changed=tuple(s for s in common if before[s]["filters"] != after[s]["filters"]),
+        filters_changed=tuple(
+            s
+            for s in common
+            if stable_filters(before[s]["filters"]) != stable_filters(after[s]["filters"])
+        ),
         fees_changed=old.fees != new.fees,
     )

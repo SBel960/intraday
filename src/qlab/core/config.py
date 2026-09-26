@@ -266,8 +266,13 @@ class BaseConfig:
     observe: ObserveConfig
     risk: RiskConfig
     capital_tiers: tuple[CapitalTier, ...]
+    secrets_file: Path
 
     def __post_init__(self) -> None:
+        _check(
+            self.secrets_file.is_absolute(),
+            f"secrets_file doit être un chemin absolu (reçu {self.secrets_file})",
+        )
         _check(len(self.exchanges) > 0, "exchanges ne doit pas être vide")
         _unique("exchanges.name", [e.name for e in self.exchanges])
         _unique("capital_tiers.name", [t.name for t in self.capital_tiers])
@@ -482,30 +487,42 @@ class QlabConfig:
 # --- conversion YAML → dataclasses -------------------------------------------------------
 
 
+def _scalar(tp: type, value: object, path: str) -> object:
+    """Valeur scalaire stricte : un booléen n'est pas un entier, un entier devient un float."""
+    ok = {
+        bool: isinstance(value, bool),
+        int: isinstance(value, int) and not isinstance(value, bool),
+        float: isinstance(value, int | float) and not isinstance(value, bool),
+        str: isinstance(value, str),
+        Path: isinstance(value, str),
+    }
+    if tp not in ok:
+        raise TypeError(f"{path} : type d'annotation non géré {tp!r}")
+    if not ok[tp]:
+        raise ConfigError(
+            f"{path} : {tp.__name__} attendu, reçu {type(value).__name__} ({value!r})"
+        )
+    if tp is float:
+        number = float(value)  # type: ignore[arg-type]  # vérifié ci-dessus
+        if not math.isfinite(number):
+            raise ConfigError(f"{path} : nombre fini attendu, reçu {value}")
+        return number
+    if isinstance(value, str) and not value.strip():
+        raise ConfigError(f"{path} : chaîne vide")
+    return Path(value).expanduser() if tp is Path else value  # type: ignore[arg-type]
+
+
 def _convert(tp: Any, value: object, path: str) -> object:
-    """Convertit ``value`` vers le type annoté ``tp`` ; strict (pas de bool pour un int, etc.)."""
+    """Convertit ``value`` vers le type annoté ``tp`` : liste → tuple, table → dataclass,
+    sinon scalaire strict (``_scalar``)."""
     if get_origin(tp) is tuple:
-        item_tp = get_args(tp)[0]
         if not isinstance(value, list):
             raise ConfigError(f"{path} : liste attendue, reçu {type(value).__name__}")
+        item_tp = get_args(tp)[0]
         return tuple(_convert(item_tp, v, f"{path}[{i}]") for i, v in enumerate(value))
     if isinstance(tp, type) and is_dataclass(tp):
         return _build(tp, value, path)
-    if tp is bool and isinstance(value, bool):
-        return value
-    if tp is int and isinstance(value, int) and not isinstance(value, bool):
-        return value
-    if tp is float and isinstance(value, int | float) and not isinstance(value, bool):
-        if not math.isfinite(value):
-            raise ConfigError(f"{path} : nombre fini attendu, reçu {value}")
-        return float(value)
-    if tp in (str, Path) and isinstance(value, str):
-        if not value.strip():
-            raise ConfigError(f"{path} : chaîne vide")
-        return Path(value).expanduser() if tp is Path else value
-    if tp not in (bool, int, float, str, Path):
-        raise TypeError(f"{path} : type d'annotation non géré {tp!r}")
-    raise ConfigError(f"{path} : {tp.__name__} attendu, reçu {type(value).__name__} ({value!r})")
+    return _scalar(tp, value, path)
 
 
 def _build[T](cls: type[T], raw: object, path: str) -> T:

@@ -16,6 +16,7 @@ dependencies = [
     "pyyaml",
     "zstandard",
     "websockets",
+    "cryptography",
 ]
 
 [project.optional-dependencies]
@@ -38,5 +39,8 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RUF", "PL", "BLE", "E722"]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RUF", "PL", "BLE", "E722", "C90"]
 ignore = ["PLR2004", "PLR0913", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12  # au-delà : découper la fonction (garde-fou anti-spaghetti)

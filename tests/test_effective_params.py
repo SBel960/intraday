@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 import yaml
+from fakes import FALLBACK_FEES, binance_symbol, exchange_info
 
 from qlab.core.config import ConfigError, QlabConfig, load_config
 from qlab.core.errors import DataError
@@ -31,49 +32,12 @@ from qlab.exchange.snapshots import Snapshot, SnapshotStore
 
 D = Decimal
 T = 1_704_067_200_000  # 2024-01-01T00:00:00Z
-FEES = {
-    "origin": "config",
-    "maker_frac": 0.001,
-    "taker_frac": 0.001,
-    "bnb_discount_frac": 0.25,
-    "pay_in_bnb": False,
-    "effective_maker_frac": 0.001,
-    "effective_taker_frac": 0.001,
-}
+FEES = FALLBACK_FEES
 
 
 def _info(sol_status: str = "TRADING", drop: str | None = None) -> dict[str, Any]:
-    filters = [
-        {
-            "filterType": "PRICE_FILTER",
-            "minPrice": "0.01",
-            "maxPrice": "1000000",
-            "tickSize": "0.01",
-        },
-        {"filterType": "LOT_SIZE", "minQty": "0.00001", "maxQty": "9000", "stepSize": "0.00001"},
-        {
-            "filterType": "NOTIONAL",
-            "minNotional": "5",
-            "applyMinToMarket": True,
-            "maxNotional": "9000000",
-            "applyMaxToMarket": False,
-        },
-    ]
     symbols = [("BTCUSDT", "TRADING"), ("ETHUSDT", "TRADING"), ("SOLUSDT", sol_status)]
-    return {
-        "serverTime": T,
-        "symbols": [
-            {
-                "symbol": s,
-                "status": st,
-                "baseAsset": s[:3],
-                "quoteAsset": "USDT",
-                "filters": filters,
-            }
-            for s, st in symbols
-            if s != drop
-        ],
-    }
+    return exchange_info([binance_symbol(s, "USDT", st) for s, st in symbols if s != drop])
 
 
 def _snapshot(**kwargs: Any) -> Snapshot:

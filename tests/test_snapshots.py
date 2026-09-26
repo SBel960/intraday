@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 import zstandard
+from fakes import FALLBACK_FEES, binance_filters, binance_symbol, exchange_info
 
 from qlab.core.errors import DataError, ExchangeError
 from qlab.core.paths import DataPaths
@@ -23,53 +24,23 @@ from qlab.exchange.snapshots import (
 T = 1_704_067_200_000  # 2024-01-01T00:00:00Z
 DAY = 86_400_000
 URL = "https://api.binance.com/api/v3/exchangeInfo"
-FEES = {
-    "origin": "config",
-    "maker_frac": 0.001,
-    "taker_frac": 0.001,
-    "bnb_discount_frac": 0.25,
-    "pay_in_bnb": False,
-    "effective_maker_frac": 0.001,
-    "effective_taker_frac": 0.001,
-}
+FEES = FALLBACK_FEES
 
 
 def filters(tick: str = "0.01", step: str = "0.00001", min_notional: str = "5") -> list[Any]:
-    return [
-        {"filterType": "PRICE_FILTER", "minPrice": tick, "maxPrice": "1000000", "tickSize": tick},
-        {"filterType": "LOT_SIZE", "minQty": step, "maxQty": "9000", "stepSize": step},
-        {
-            "filterType": "NOTIONAL",
-            "minNotional": min_notional,
-            "applyMinToMarket": True,
-            "maxNotional": "9000000",
-            "applyMaxToMarket": False,
-        },
-    ]
+    return binance_filters(tick, step, min_notional)
 
 
 def info(server_time: int = T) -> dict[str, Any]:
-    def sym(name: str, base: str, quote: str, status: str = "TRADING") -> dict[str, Any]:
-        return {
-            "symbol": name,
-            "status": status,
-            "baseAsset": base,
-            "quoteAsset": quote,
-            "filters": filters(),
-        }
-
-    return {
-        "timezone": "UTC",
-        "serverTime": server_time,
-        "rateLimits": [],
-        "exchangeFilters": [],
-        "symbols": [
-            sym("BTCEUR", "BTC", "EUR"),
-            sym("ETHEUR", "ETH", "EUR"),
-            sym("BTCUSDT", "BTC", "USDT"),
-            sym("OLDEUR", "OLD", "EUR", status="BREAK"),
+    return exchange_info(
+        [
+            binance_symbol("BTCEUR", "EUR"),
+            binance_symbol("ETHEUR", "EUR"),
+            binance_symbol("BTCUSDT", "USDT"),
+            binance_symbol("OLDEUR", "EUR", "BREAK"),
         ],
-    }
+        server_time,
+    )
 
 
 def store(tmp_path: Path) -> SnapshotStore:
@@ -248,3 +219,53 @@ def test_corrupt_snapshot(tmp_path: Path) -> None:
     snap.path.write_bytes(b"pas du zstd")
     with pytest.raises(DataError, match="illisible"):
         s.latest()
+
+
+# --- non-régression de l'audit (2026-09-26) -----------------------------------------------
+
+
+def _with_market_max(qty: str) -> dict[str, Any]:
+    doc = info()
+    for sym in doc["symbols"]:
+        sym["filters"] = [
+            *filters(),
+            {"filterType": "MARKET_LOT_SIZE", "minQty": "0", "maxQty": qty, "stepSize": "0"},
+        ]
+    return doc
+
+
+def test_volatile_field_neither_versions_nor_alerts(tmp_path: Path) -> None:
+    """MARKET_LOT_SIZE.maxQty recalculé par Binance (6,07 → 6,11) : pas de nouvelle version."""
+    s = store(tmp_path)
+    first = s.save(_with_market_max("6.06643520"), FEES, T, URL)
+    second = s.save(_with_market_max("6.10769995"), FEES, T + DAY, URL)
+    assert first.written and not second.written
+    assert len(s.paths()) == 1
+
+
+def test_volatile_field_ignored_by_diff(tmp_path: Path) -> None:
+    old = store(tmp_path).save(_with_market_max("6.0"), FEES, T, URL).snapshot
+    changed = _with_market_max("7.0")
+    changed["symbols"][0]["status"] = "BREAK"  # vrai changement pour forcer une version
+    new = store(tmp_path).save(changed, FEES, T + DAY, URL).snapshot
+    d = diff_snapshots(old, new)
+    assert d.filters_changed == () and d.status_changed == (("BTCEUR", "TRADING", "BREAK"),)
+
+
+def test_real_filter_change_still_detected(tmp_path: Path) -> None:
+    s = store(tmp_path)
+    s.save(_with_market_max("6.0"), FEES, T, URL)
+    changed = _with_market_max("6.0")
+    changed["symbols"][0]["filters"][2]["minNotional"] = "10"
+    r = s.save(changed, FEES, T + DAY, URL)
+    assert r.written and r.previous is not None
+    assert diff_snapshots(r.previous, r.snapshot).filters_changed == ("BTCEUR",)
+
+
+def test_integrity_hash_unchanged_for_old_snapshots(tmp_path: Path) -> None:
+    """L'empreinte d'intégrité couvre tout le contenu (champs volatils compris) : les snapshots
+    écrits avant l'audit restent valides à la relecture."""
+    s = store(tmp_path)
+    snap = s.save(_with_market_max("6.0"), FEES, T, URL).snapshot
+    assert snap.content_hash == content_hash(snap.info, snap.fees)
+    assert s.load(snap.path) == snap

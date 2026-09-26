@@ -133,7 +133,11 @@ def sync(
     report = SyncReport(listed=len(archives))
     todo = []
     for a in archives:
-        local = paths.raw_archive(SOURCE, a.relative_key)
+        try:
+            local = paths.raw_archive(SOURCE, a.relative_key)
+        except ValueError as exc:  # clé reçue du serveur qui sortirait du dossier : écartée
+            report.failed.append((a.key, str(exc)))
+            continue
         if not local.exists():
             todo.append(a)
         elif local.stat().st_size == a.size:
@@ -169,62 +173,40 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--dry-run", action="store_true", help="compter sans télécharger")
 
 
-def _action(ctx: Context) -> int:
+@dataclass(frozen=True, slots=True)
+class _Selection:
+    """Ce qu'il faut synchroniser, d'après la config et la ligne de commande."""
+
+    datasets: tuple[str, ...]
+    symbols: list[str] | None
+    trading: set[str] | None  # include_delisted faux : seules ces paires
+    active: set[str] | None  # en cotation : seules à publier des archives du mois en cours
+
+
+def _selection(ctx: Context) -> _Selection:
     cfg, a = ctx.config.base, ctx.args
-    observe, archives_cfg = cfg.observe, cfg.archives
-
-    def notify(message: str) -> None:
-        print(message, file=sys.stderr, flush=True)
-        ctx.journal.warning("fetch.retry", {"message": message})
-
-    def fetch(url: str) -> bytes:
-        return http.get(url, notify=notify).body
-
     datasets: tuple[str, ...] = DATASETS if a.dataset == "all" else (a.dataset,)
-    if not observe.futures_metrics:
+    if not cfg.observe.futures_metrics:
         datasets = tuple(d for d in datasets if d == "klines")
     latest = SnapshotStore(ctx.paths, cfg.exchange(a.exchange).name).latest()
     active = None if latest is None else {s["symbol"] for s in latest.symbols()}
     if latest is None:
         print("Pas de snapshot exchangeInfo : mois en cours listé pour toutes les paires (lent)")
-    if not observe.include_delisted and active is None:
+    if not cfg.observe.include_delisted and active is None:
         raise DataError("include_delisted faux : un snapshot exchangeInfo est nécessaire")
-    trading = None if observe.include_delisted else active
     symbols = None if a.symbols is None else [s.strip() for s in a.symbols.split(",")]
-    print("Listage des archives publiées…")
-    list_url = archives_cfg.binance_vision_list_url
-    prefixes = archive_prefixes(
-        fetch,
-        list_url,
-        datasets=datasets,
-        intervals=observe.kline_intervals,
-        symbols=symbols,
-        metrics_symbols=archives_cfg.futures_metrics_symbols,
-        today=date_str(now_ms()),
-        trading=trading,
-        active=active,
-    )
-    print(f"{len(prefixes)} dossiers à lister…", flush=True)
-    remote = list_all(fetch, list_url, prefixes, workers=archives_cfg.list_workers)
-    total_mb = sum(r.size for r in remote) / 1e6
-    print(f"{len(remote)} archives publiées ({total_mb:.1f} Mo)")
-    report = sync(
-        remote,
-        base_url=archives_cfg.binance_vision_url,
-        paths=ctx.paths,
-        fetch=fetch,
-        workers=archives_cfg.download_workers,
-        dry_run=a.dry_run,
-    )
+    return _Selection(datasets, symbols, None if cfg.observe.include_delisted else active, active)
+
+
+def _report(ctx: Context, sel: _Selection, report: SyncReport) -> None:
+    dry_run = ctx.args.dry_run
     missing = report.listed - report.present - len(report.republished)
-    print(
-        f"Déjà présentes : {report.present} ; à télécharger : {missing}"
-        + (
-            " (simulation)"
-            if a.dry_run
-            else f" ; téléchargées : {report.downloaded} ({report.downloaded_bytes / 1e6:.1f} Mo)"
-        )
+    done = (
+        " (simulation)"
+        if dry_run
+        else f" ; téléchargées : {report.downloaded} ({report.downloaded_bytes / 1e6:.1f} Mo)"
     )
+    print(f"Déjà présentes : {report.present} ; à télécharger : {missing}{done}")
     for key in report.republished:
         print(
             f"ATTENTION : republiée avec une autre taille, ancienne gardée : {key}", file=sys.stderr
@@ -234,16 +216,50 @@ def _action(ctx: Context) -> int:
     ctx.journal.info(
         "archives.sync",
         {
-            "datasets": list(datasets),
+            "datasets": list(sel.datasets),
             "listed": report.listed,
             "present": report.present,
             "downloaded": report.downloaded,
             "bytes": report.downloaded_bytes,
             "republished": list(report.republished[:100]),
             "failed": list(k for k, _ in report.failed[:100]),
-            "dry_run": a.dry_run,
+            "dry_run": dry_run,
         },
     )
+
+
+def _action(ctx: Context) -> int:
+    archives_cfg, observe = ctx.config.base.archives, ctx.config.base.observe
+
+    def fetch(url: str) -> bytes:
+        return http.get(url, notify=ctx.notify).body
+
+    sel = _selection(ctx)
+    print("Listage des archives publiées…")
+    list_url = archives_cfg.binance_vision_list_url
+    prefixes = archive_prefixes(
+        fetch,
+        list_url,
+        datasets=sel.datasets,
+        intervals=observe.kline_intervals,
+        symbols=sel.symbols,
+        metrics_symbols=archives_cfg.futures_metrics_symbols,
+        today=date_str(now_ms()),
+        trading=sel.trading,
+        active=sel.active,
+    )
+    print(f"{len(prefixes)} dossiers à lister…", flush=True)
+    remote = list_all(fetch, list_url, prefixes, workers=archives_cfg.list_workers)
+    print(f"{len(remote)} archives publiées ({sum(r.size for r in remote) / 1e6:.1f} Mo)")
+    report = sync(
+        remote,
+        base_url=archives_cfg.binance_vision_url,
+        paths=ctx.paths,
+        fetch=fetch,
+        workers=archives_cfg.download_workers,
+        dry_run=ctx.args.dry_run,
+    )
+    _report(ctx, sel, report)
     return 1 if report.failed else 0
 
 

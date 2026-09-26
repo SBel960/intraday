@@ -138,3 +138,31 @@ def test_default_notify_writes_stderr(capsys: pytest.CaptureFixture[str]) -> Non
     flaky: Any = Flaky([urllib.error.URLError("x")])
     http.get(URL, opener=flaky.open, sleep=lambda _: None)
     assert "réseau indisponible" in capsys.readouterr().err
+
+
+# --- en-têtes et messages d'erreur (clé d'API) --------------------------------------------
+
+
+def test_headers_are_sent_in_a_request() -> None:
+    seen: list[Any] = []
+
+    def open_url(target: Any, timeout: int) -> _Resp:
+        seen.append(target)
+        return _Resp(b"ok")
+
+    http.get(URL, headers={"X-MBX-APIKEY": "cle"}, opener=open_url, notify=lambda _: None)
+    assert seen[0].get_header("X-mbx-apikey") == "cle"  # urllib normalise la casse
+    http.get(URL, opener=open_url, notify=lambda _: None)
+    assert seen[1] == URL  # sans en-tête : l'URL brute, comme avant
+
+
+def test_error_shows_binance_message_but_not_query() -> None:
+    signed = URL + "?timestamp=1&signature=SECRETSIG"
+    body = b'{"code":-1021,"msg":"Timestamp for this request is outside of the recvWindow."}'
+    error = urllib.error.HTTPError(signed, 400, "Bad", {}, io.BytesIO(body))  # type: ignore[arg-type]
+    flaky = Flaky([error])
+    with pytest.raises(ExchangeError) as err:
+        http.get(signed, opener=flaky.open, notify=lambda _: None)
+    message = str(err.value)
+    assert "-1021" in message and "recvWindow" in message
+    assert "SECRETSIG" not in message and "timestamp=" not in message

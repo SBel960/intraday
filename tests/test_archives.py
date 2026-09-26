@@ -245,3 +245,17 @@ def test_network_errors_propagate_from_http(tmp_path: Path) -> None:
     vision = FakeVision(CONTENT, failing={key: urllib.error.URLError("coupé")})
     with pytest.raises(urllib.error.URLError):
         _sync(vision, DataPaths(tmp_path), [ArchiveFile(key, 14)])
+
+
+# --- non-régression de l'audit (2026-09-26) -----------------------------------------------
+
+
+def test_malicious_key_is_skipped_not_fatal(tmp_path: Path) -> None:
+    """Clé d'archive qui sortirait du dossier : écartée et signalée, les autres continuent."""
+    evil = ArchiveFile("data/../../../tmp/pwned.zip", 5)
+    good_key = f"{M}/BTCUSDT/1d/BTCUSDT-1d-2024-01.zip"
+    vision = FakeVision(CONTENT)
+    report = _sync(vision, DataPaths(tmp_path), [evil, ArchiveFile(good_key, 14)])
+    assert [k for k, _ in report.failed] == [evil.key]
+    assert report.downloaded == 1
+    assert not (tmp_path.parent / "tmp" / "pwned.zip").exists()

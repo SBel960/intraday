@@ -17,6 +17,7 @@ from __future__ import annotations
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -67,9 +68,26 @@ def _retry_after_s(exc: urllib.error.HTTPError) -> int:
         return RATE_LIMIT_WAIT_S
 
 
+def _public(url: str) -> str:
+    """URL sans paramètres pour les messages : ni horodatage ni signature dans les journaux."""
+    parts = urllib.parse.urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}{parts.path}"
+
+
+def _error_detail(exc: urllib.error.HTTPError) -> str:
+    """Corps de la réponse d'erreur (ex. ``{"code":-1021,"msg":…}`` de Binance), tronqué."""
+    try:
+        body = exc.read()
+    except OSError:
+        return ""
+    text = body.decode("utf-8", errors="replace").strip()
+    return f" : {text[:300]}" if text else ""
+
+
 def get(
     url: str,
     *,
+    headers: Mapping[str, str] | None = None,
     opener: Opener | None = None,
     sleep: Callable[[float], None] = time.sleep,
     clock_ms: Callable[[], int] | None = None,
@@ -77,8 +95,13 @@ def get(
 ) -> HttpResult:
     """GET ``url`` en attendant le réseau aussi longtemps qu'il le faut (voir le module).
 
+    ``headers`` : en-têtes de la requête (ex. clé d'API) ; jamais écrits dans les messages.
     ``clock_ms`` : horloge locale en epoch ms (défaut ``now_ms``, lue à chaque appel).
+    Les messages d'erreur montrent l'URL **sans** ses paramètres (signature, horodatage).
     """
+    target: str | urllib.request.Request = (
+        urllib.request.Request(url, headers=dict(headers)) if headers else url
+    )
     open_url = opener or urllib.request.urlopen
     clock = clock_ms or now_ms
     attempt = 0
@@ -86,14 +109,14 @@ def get(
         attempt += 1
         sent_ms = clock()
         try:
-            with open_url(url, timeout=TIMEOUT_S) as resp:
+            with open_url(target, timeout=TIMEOUT_S) as resp:
                 body = resp.read()
                 headers = {k.lower(): v for k, v in dict(resp.headers).items()}
             return HttpResult(body, headers, sent_ms, clock(), attempt)
         except urllib.error.HTTPError as exc:
             if exc.code == 418:
                 raise ExchangeError(
-                    f"HTTP 418 sur {url} : IP bannie temporairement par Binance "
+                    f"HTTP 418 sur {_public(url)} : IP bannie temporairement par Binance "
                     "(trop de requêtes) ; ne pas relancer avant la levée du bannissement"
                 ) from exc
             if exc.code == 429:
@@ -102,7 +125,9 @@ def get(
                 sleep(wait_s)
                 continue
             if exc.code < 500:
-                raise ExchangeError(f"HTTP {exc.code} sur {url}") from exc
+                raise ExchangeError(
+                    f"HTTP {exc.code} sur {_public(url)}{_error_detail(exc)}"
+                ) from exc
             reason = f"erreur serveur (HTTP {exc.code})"
         except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
             reason = f"réseau indisponible ({exc})"
