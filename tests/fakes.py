@@ -77,7 +77,7 @@ class FakeVision:
     def __call__(self, url: str) -> bytes:
         if url.startswith(self.list_url + "?"):
             return self.s3(url)
-        key = url.removeprefix(self.base_url + "/")
+        key = urllib.parse.unquote(url.removeprefix(self.base_url + "/"))  # comme le serveur
         if key.endswith(".CHECKSUM"):
             zip_key = key.removesuffix(".CHECKSUM")
             sha = hashlib.sha256(self.content[zip_key]).hexdigest()

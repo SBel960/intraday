@@ -5,6 +5,7 @@ gate:
   min_move_cost_ratio: 3.0           # horizon retenu : premier où mouvement médian / c > 3
   slot_minutes: 60                   # tranche horaire du gate (UTC)
   slippage_frac: 0.0                 # slippage supposé par jambe au top of book (hypothèse)
+  sample_step_ms: 1000               # grille régulière : 1 point par seconde
 
 latency:
   data_ms: 100                       # retard des données vues par la décision

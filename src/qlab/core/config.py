@@ -315,10 +315,14 @@ class BaseConfig:
 
 @dataclass(frozen=True, slots=True)
 class GateConfig:
+    """Cost gate (§5). ``sample_step_ms`` : pas de la grille régulière d'échantillonnage (sinon
+    les périodes agitées, riches en cotations, pèseraient plus que les calmes)."""
+
     horizons_s: tuple[int, ...]
     min_move_cost_ratio: float
     slot_minutes: int
     slippage_frac: float
+    sample_step_ms: int
 
     def __post_init__(self) -> None:
         _increasing("horizons_s", self.horizons_s)
@@ -328,6 +332,11 @@ class GateConfig:
             f"slot_minutes doit diviser 1440 (reçu {self.slot_minutes})",
         )
         _non_negative("slippage_frac", self.slippage_frac)
+        _positive("sample_step_ms", self.sample_step_ms)
+        _check(
+            self.sample_step_ms <= self.horizons_s[0] * 1000,
+            f"sample_step_ms ({self.sample_step_ms}) doit être ≤ au plus petit horizon",
+        )
 
 
 @dataclass(frozen=True, slots=True)

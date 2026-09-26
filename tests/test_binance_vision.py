@@ -87,3 +87,13 @@ def test_file_url() -> None:
     assert bv.file_url("https://data.binance.vision/", "data/a.zip") == (
         "https://data.binance.vision/data/a.zip"
     )
+
+
+def test_file_url_encodes_non_ascii_symbols() -> None:
+    """Paire réelle au nom chinois (audit 2026-09-26 : le téléchargement complet plantait)."""
+    url = bv.file_url("https://data.binance.vision", "data/spot/币安人生USDT/币安人生USDT-1d.zip")
+    assert url.isascii()
+    assert url == (
+        "https://data.binance.vision/data/spot/%E5%B8%81%E5%AE%89%E4%BA%BA%E7%94%9FUSDT/"
+        "%E5%B8%81%E5%AE%89%E4%BA%BA%E7%94%9FUSDT-1d.zip"
+    )

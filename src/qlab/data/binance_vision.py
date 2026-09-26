@@ -109,4 +109,6 @@ def parse_checksum(text: bytes, zip_name: str) -> str:
 
 
 def file_url(base_url: str, key: str) -> str:
-    return f"{base_url.rstrip('/')}/{key}"
+    """URL de téléchargement ; la clé est encodée (des paires ont un nom non ASCII, ex.
+    ``币安人生USDT`` : sans encodage, la requête HTTP échoue)."""
+    return f"{base_url.rstrip('/')}/{urllib.parse.quote(key, safe='/')}"

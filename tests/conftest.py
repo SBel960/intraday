@@ -51,6 +51,7 @@ INTRADAY: dict[str, object] = {
         "min_move_cost_ratio": 3.0,
         "slot_minutes": 60,
         "slippage_frac": 0.0,
+        "sample_step_ms": 1000,
     },
     "latency": {"data_ms": 100, "order_ms": 100},
     "features": {

@@ -259,3 +259,15 @@ def test_malicious_key_is_skipped_not_fatal(tmp_path: Path) -> None:
     assert [k for k, _ in report.failed] == [evil.key]
     assert report.downloaded == 1
     assert not (tmp_path.parent / "tmp" / "pwned.zip").exists()
+
+
+def test_non_ascii_symbol_downloads_end_to_end(tmp_path: Path) -> None:
+    """Paire au nom chinois : listée, téléchargée, vérifiée, rangée sous son vrai nom."""
+    key = f"{M}/币安人生USDT/1d/币安人生USDT-1d-2026-01.zip"
+    vision = FakeVision({key: b"archive-chinoise"})
+    report = _sync(
+        vision, DataPaths(tmp_path), _remote(vision, datasets=("klines",), intervals=("1d",))
+    )
+    assert (report.downloaded, report.failed) == (1, [])
+    local = DataPaths(tmp_path).raw_archive("binance_vision", key.removeprefix("data/"))
+    assert local.read_bytes() == b"archive-chinoise"

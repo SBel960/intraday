@@ -263,6 +263,8 @@ def test_unknown_exchange_lookup(config_dir: Path) -> None:
         (["gate", "horizons_s"], [0, 5], r"horizons_s\[0\] doit être > 0"),
         (["gate", "slot_minutes"], 7, "diviser 1440"),
         (["gate", "min_move_cost_ratio"], 0, "> 0"),
+        (["gate", "sample_step_ms"], 0, "sample_step_ms doit être > 0"),
+        (["gate", "sample_step_ms"], 6000, r"≤ au plus petit horizon"),
         (["latency", "order_ms"], -1, "≥ 0"),
         (["features", "ewma_lambda"], 1.0, r"ewma_lambda doit être dans \]0, 1\["),
         (["features", "vpin_n_buckets"], 0, "vpin_n_buckets"),

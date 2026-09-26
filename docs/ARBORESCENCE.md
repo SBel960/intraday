@@ -178,7 +178,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 19 | 0 · Données réelles | `data/binance_vision.py` | validé |
 | 20 | 0 · Données réelles | `data/archives.py` | validé |
 | 21 | 1 · Gate | `costs/cost_model.py` | validé |
-| 22 | 1 · Gate | `costs/cost_gate.py` | à faire |
+| 22 | 1 · Gate | `costs/cost_gate.py` | validé |
 | — | 1 · Gate | **Cost gate v1 sur données réelles** : aggTrades (archives Binance) + book_ticker (jours gratuits Tardis.dev) | à faire |
 | 23 | 2 · Recherche | `research/hypothesis.py` (+ `hypotheses/_template.yaml`) | à faire |
 | 24 | 2 · Recherche | `hypotheses/lt_*.yaml` : 6 fiches initiales, écrites avant tout test | à faire |
