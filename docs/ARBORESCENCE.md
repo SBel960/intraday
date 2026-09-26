@@ -217,7 +217,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 42 | 3 · Long terme | `sizing/sizing.py` | validé |
 | 43 | 3 · Long terme | `longterm/lt_backtest.py` | validé |
 | 44 | 3 · Long terme | `longterm/lt_report.py` | validé |
-| 44 bis | 3 · Long terme | `longterm/lt_wave.py` (+ `signals.equal_weight`, `strategies.multi_asset` et `breadth_lengths`, config `acceptance`) | validé |
+| 44 bis | 3 · Long terme | `longterm/lt_wave.py` (+ `signals.equal_weight`, `strategies.multi_asset` et `breadth_lengths`, config `acceptance`) | à revalider (évaluation après la chauffe de chaque essai) |
 | 45 | 4 · Paper LT | `live/risk.py` | à faire |
 | 46 | 4 · Paper LT | `live/broker.py` | à faire |
 | 47 | 4 · Paper LT | `live/paper.py` | à faire |

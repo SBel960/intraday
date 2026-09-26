@@ -92,11 +92,20 @@ def _per_asset(
         closes = both.filter(pl.col(sg.DATE) >= start)  # grille complète depuis que tous existent
         sub = dataclasses.replace(setup.market, closes=closes)
         weights = strategies.strategy_for(hypothesis).build(sub, params)
+        first = first_decision(weights)
         out["+".join(group)] = (
-            _returns(setup, weights, policy, closes),
-            _returns(setup, sg.equal_weight(closes), BUY_HOLD, closes),
+            _returns(setup, weights, policy, closes)[first:],
+            _returns(setup, sg.equal_weight(closes), BUY_HOLD, closes)[first:],
         )
     return out
+
+
+def first_decision(weights: pl.DataFrame) -> int:
+    """Indice du premier jour où la stratégie veut être investie : la chauffe de ses signaux
+    (ex. un an de financement) est exclue de l'évaluation, pour elle comme pour ses références
+    (le rendement d'indice t va du jour t au jour t + 1 : il porte la première exécution)."""
+    invested = weights.select(pl.sum_horizontal(pl.exclude(sg.DATE)) > 0)[:, 0].to_numpy()
+    return int(invested.argmax()) if invested.any() else weights.height - 1
 
 
 def _criteria(config: QlabConfig) -> research_report.Criteria:
@@ -114,7 +123,7 @@ def _criteria(config: QlabConfig) -> research_report.Criteria:
 
 
 Kept = tuple[Hypothesis, dict[str, float], Policy, pl.DataFrame]
-Refs = tuple[np.ndarray, tuple[lt_report.Metrics, float], int, float]  # B&H, DCA, N, V[SR]
+Refs = tuple[np.ndarray, int, float]  # rendements du buy & hold (grille entière), N, V[SR]
 
 
 def _gate(setup: Setup, hypotheses: Sequence[Hypothesis]) -> tuple[list[Kept], list[str]]:
@@ -144,12 +153,18 @@ def _result(returns: np.ndarray, ppy: int) -> TrialResult:
 
 
 def _judge(setup: Setup, trial: Kept, returns: np.ndarray, refs: Refs) -> str:
-    """Verdict d'un essai face aux références ; non évaluable ⇒ dit pourquoi."""
-    h, params, policy, _ = trial
-    bench, dca, n_trials, variance = refs
+    """Verdict d'un essai face aux références, sur sa fenêtre d'évaluation (après chauffe) ;
+    non évaluable ⇒ dit pourquoi."""
+    h, params, policy, weights = trial
+    full_bench, n_trials, variance = refs
+    first = first_decision(weights)
+    bench = full_bench[first:]
     name, ppy = strategies.trial_name(h, params), setup.market.days_per_year
-    labels = lt_report.year_labels(setup.market.closes[sg.DATE].to_list())
+    dates = setup.market.closes[sg.DATE].to_list()
+    labels = lt_report.year_labels(dates)[first:]
+    window = f"Évaluation du {date_str(dates[first])} au {date_str(dates[-1])} (chauffe exclue)."
     try:
+        dca = _dca(setup, first)
         per_asset = _per_asset(setup, h, params, policy)
         evidence = research_report.Evidence(
             name, returns, bench, labels, per_asset, n_trials, variance, ppy
@@ -159,7 +174,7 @@ def _judge(setup: Setup, trial: Kept, returns: np.ndarray, refs: Refs) -> str:
     except DataError as e:  # ex. jamais investi : Sharpe indéfini
         return f"## {name}\n\n**Verdict : {research_report.REJECTED}** (non évaluable : {e})\n"
     bench_metrics = lt_report.metrics(bench, ppy)
-    return lt_report.render(report, strategy_metrics, bench_metrics, dca, list(NOTES))
+    return lt_report.render(report, strategy_metrics, bench_metrics, dca, [window, *NOTES])
 
 
 def run_wave(setup: Setup, hypotheses: Sequence[Hypothesis], registry: TrialRegistry) -> str:
@@ -168,13 +183,12 @@ def run_wave(setup: Setup, hypotheses: Sequence[Hypothesis], registry: TrialRegi
     kept, lines = _gate(setup, hypotheses)
     returns = []
     for h, params, policy, weights in kept:  # 1) tout enregistrer d'abord
-        r = _returns(setup, weights, policy, closes)
+        r = _returns(setup, weights, policy, closes)[first_decision(weights) :]
         registry.record(h, params, _result(r, ppy), ts_ms=now_ms(), note=setup.tier.name)
         returns.append(r)
     n_trials = registry.n_trials("longterm")
     variance = float(np.var(registry.sharpes("longterm")))
     bench = _returns(setup, sg.equal_weight(closes), BUY_HOLD, closes)
-    dca = _dca(setup)
     lines += [
         "",
         _oracle_check(setup, bench),
@@ -182,7 +196,7 @@ def run_wave(setup: Setup, hypotheses: Sequence[Hypothesis], registry: TrialRegi
         "",
     ]
     for trial, r in zip(kept, returns, strict=True):  # 2) puis juger
-        lines.append(_judge(setup, trial, r, (bench, dca, n_trials, variance)))
+        lines.append(_judge(setup, trial, r, (bench, n_trials, variance)))
     return "\n".join(lines)
 
 
@@ -210,14 +224,16 @@ def _oracle_check(setup: Setup, bench: np.ndarray) -> str:
     return f"Contrôle anti-fuite du pipeline (oracle / buy & hold = {ratio:.3g}) : {verdict}"
 
 
-def _dca(setup: Setup) -> tuple[lt_report.Metrics, float]:
-    closes, cfg = setup.market.closes, setup.config.longterm.dca
+def _dca(setup: Setup, first: int) -> tuple[lt_report.Metrics, float]:
+    """DCA de référence sur la même fenêtre que l'essai (à partir de ``first``)."""
+    cfg = setup.config.longterm.dca
+    closes, opens = setup.market.closes[first:], setup.opens[first:]
     dates = closes[sg.DATE].to_list()
     flows = lt_report.dca_flows(dates, Decimal(str(cfg.amount_quote)), cfg.period_days)
     weights = sg.equal_weight(closes)
     policy = Policy("calendar", period_days=cfg.period_days)
     res = lt_backtest.run(
-        weights, setup.opens, closes, policy, setup.rules, initial_quote=Decimal(0), flows=flows
+        weights, opens, closes, policy, setup.rules, initial_quote=Decimal(0), flows=flows
     )
     ppy = setup.market.days_per_year
     return lt_report.metrics(res.twr_returns(), ppy), lt_report.mwr(res.flows, res.equity[-1], ppy)

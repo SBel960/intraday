@@ -70,6 +70,7 @@ def test_wave_records_every_backtested_trial_before_judging(
     assert sum(r.startswith("| Buy & hold |") for r in rows) == len(kept)
     assert sum(r.startswith("| DCA |") for r in rows) == len(kept)
     assert "Contrôle anti-fuite du pipeline" in body and ") : ok" in body
+    assert body.count("(chauffe exclue)") == len(kept) and "non évaluable" not in body
     assert "Filtres d'ordre (pas, minimum) du snapshot actuel" in body
 
 
@@ -126,3 +127,11 @@ def test_never_invested_trial_counts_with_zero_sharpe() -> None:
     r = lt_wave._result(np.zeros(10), 365)
     assert (r.sharpe, r.n_obs, r.skew, r.kurtosis) == (0.0, 10, 0.0, 3.0)
     assert lt_wave._result(np.array([0.01, -0.02, 0.03]), 365).sharpe != 0
+
+
+def test_first_decision_skips_the_warm_up() -> None:
+    """Cash les jours 0 à 2 (signal pas encore défini), investi dès le jour 3 ; jamais
+    investi ⇒ dernier jour (fenêtre vide)."""
+    w = pl.DataFrame({DATE: [T0 + i * D for i in range(5)], "A": [0.0, 0.0, 0.0, 0.5, 0.0]})
+    assert lt_wave.first_decision(w) == 3
+    assert lt_wave.first_decision(w.with_columns(A=pl.lit(0.0))) == 4
