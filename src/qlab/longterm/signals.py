@@ -66,6 +66,13 @@ def _equal_sleeves(closes: pl.DataFrame, on: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+def equal_weight(closes: pl.DataFrame) -> pl.DataFrame:
+    """Référence : panier équipondéré des actifs présents chaque jour (1/N chacun)."""
+    return _equal_sleeves(
+        closes, closes.select(DATE, *(pl.lit(True).alias(a) for a in _assets(closes)))
+    )
+
+
 def log_return(closes: pl.DataFrame, days: int, skip: int = 0) -> pl.DataFrame:
     """ln(C_{t−skip} / C_{t−days}) par actif ; nul si une des deux clôtures manque."""
     _check_days(days=days)

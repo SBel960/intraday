@@ -48,6 +48,11 @@ def test_policies_follow_fiche_horizons() -> None:
         st.policy_for(dataclasses.replace(_fiche("lt_ts_momentum"), id="lt_inconnue"))
 
 
+def test_multi_asset_fiches_are_flagged() -> None:
+    flagged = {k for k, s in st.REGISTRY.items() if s.multi_asset}
+    assert flagged == {"lt_xs_momentum", "lt_low_volatility"}
+
+
 def test_trial_name_and_integer_days() -> None:
     assert st.trial_name(_fiche("lt_xs_momentum"), {"lookback_days": 30.0, "top_k": 1.0}) == (
         "lt_xs_momentum · lookback_days=30, top_k=1"

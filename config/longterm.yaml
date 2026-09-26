@@ -38,3 +38,14 @@ costs:
   eur_conversion_cost_frac: 0.0      # devise de cotation EUR : aucune conversion
   max_drag_edge_fraction: 0.5        # drag > 50 % de l'edge visé ⇒ stratégie non testée
   max_rejected_share: 0.5            # > 50 % du VOLUME voulu sous minNotional ⇒ non réalisable à ce palier (2026-09-26)
+
+# Critères d'acceptation (LT.6, tous requis) ; fixés avant le premier backtest de la vague 1.
+acceptance:
+  dsr_min: 0.95
+  confidence: 0.95                   # IC bootstrap de l'écart de Sharpe ; MinTRL au risque 5 %
+  min_subperiods: 3                  # années civiles, dont une baissière
+  min_assets: 2                      # actifs (ou sous-paniers de 2 pour une fiche multi-actifs)
+  require_bear: true
+  n_boot: 2000
+  mean_block_days: 20                # blocs d'environ 3 semaines : garde l'autocorrélation
+  seed: 20260926

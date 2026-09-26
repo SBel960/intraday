@@ -38,6 +38,12 @@ def test_wide_builds_a_complete_daily_grid() -> None:
     assert panel["B"].to_list() == [None, 5.0, None]
 
 
+def test_equal_weight() -> None:
+    """Jour 0 : A et B présents ⇒ 1/2 chacun ; jour 1 : B absent ⇒ A reçoit tout."""
+    w = sg.equal_weight(_panel(A=[1, 1], B=[1, None]))
+    assert _w(w, "A") == [0.5, 1.0] and _w(w, "B") == [0.5, 0.0]
+
+
 def test_log_return_with_skip_by_hand() -> None:
     """C = 1 2 4 8 16, L = 3, S = 1 : t = 3 → ln(C₂ / C₀) = ln 4 ; t = 4 → ln(C₃ / C₁) = ln 4."""
     r = sg.log_return(_panel(A=[1, 2, 4, 8, 16]), 3, 1)["A"].to_list()

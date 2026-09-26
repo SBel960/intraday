@@ -89,14 +89,18 @@ def _turn_of_month(m: Market, p: Params) -> pl.DataFrame:
 
 @dataclass(frozen=True, slots=True)
 class Strategy:
+    """``multi_asset`` : la fiche répartit entre plusieurs actifs (sur un seul, elle se réduit
+    au buy & hold) ; sa stabilité se vérifie sur des sous-paniers, pas actif par actif."""
+
     build: Callable[[Market, Params], pl.DataFrame]
     rebalance_days: int | None = None  # None : horizon de la fiche
+    multi_asset: bool = False
 
 
 REGISTRY: dict[str, Strategy] = {
     "lt_ts_momentum": Strategy(_ts_momentum),
-    "lt_xs_momentum": Strategy(_xs_momentum),
-    "lt_low_volatility": Strategy(_low_volatility),
+    "lt_xs_momentum": Strategy(_xs_momentum, multi_asset=True),
+    "lt_low_volatility": Strategy(_low_volatility, multi_asset=True),
     "lt_short_reversal": Strategy(_short_reversal),
     "lt_funding_leverage": Strategy(_funding_leverage),
     "lt_market_breadth": Strategy(_market_breadth),
@@ -144,6 +148,13 @@ def load_market(
     return Market(closes, mean_rate, breadth, days, config.longterm.signals)
 
 
+def breadth_lengths(hypotheses: Sequence[Hypothesis]) -> list[int]:
+    """Longueurs de moyenne (``ma_days``) dont les fiches ont besoin pour la largeur."""
+    return sorted(
+        {int(v) for h in hypotheses for p in h.parameters if p.name == "ma_days" for v in p.values}
+    )
+
+
 def trial_name(hypothesis: Hypothesis, params: Params) -> str:
     return f"{hypothesis.id} · " + ", ".join(f"{k}={v:g}" for k, v in params.items())
 
@@ -180,9 +191,7 @@ def _action(ctx: Context) -> int:
     if snapshot is None:
         raise DataError("aucun snapshot exchangeInfo : lancer d'abord exchange_info fetch")
     fiches = [h for h in load_all(ctx.args.hypotheses) if h.volet == "longterm"]
-    ma_days = sorted(
-        {int(v) for h in fiches for p in h.parameters if p.name == "ma_days" for v in p.values}
-    )
+    ma_days = breadth_lengths(fiches)
     market = load_market(ctx.paths, config, snapshot, ma_days, ctx.args.exchange)
     rows = cost_rows(config, snapshot, market, fiches)
     now = now_ms()

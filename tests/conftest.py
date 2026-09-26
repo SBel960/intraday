@@ -96,6 +96,16 @@ LONGTERM: dict[str, object] = {
         "max_drag_edge_fraction": 0.5,
         "max_rejected_share": 0.5,
     },
+    "acceptance": {
+        "dsr_min": 0.95,
+        "confidence": 0.95,
+        "min_subperiods": 3,
+        "min_assets": 2,
+        "require_bear": True,
+        "n_boot": 200,
+        "mean_block_days": 10,
+        "seed": 0,
+    },
 }
 
 

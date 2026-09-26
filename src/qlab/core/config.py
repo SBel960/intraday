@@ -502,6 +502,31 @@ class LtCostsConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class AcceptanceConfig:
+    """Critères d'acceptation (SPEC_LONG_TERME LT.6) et réglages du bootstrap stationnaire
+    (``research/report.py``). ``mean_block_days`` : longueur moyenne des blocs tirés."""
+
+    dsr_min: float
+    confidence: float
+    min_subperiods: int
+    min_assets: int
+    require_bear: bool
+    n_boot: int
+    mean_block_days: float
+    seed: int
+
+    def __post_init__(self) -> None:
+        _fraction("dsr_min", self.dsr_min)
+        _fraction("confidence", self.confidence)
+        _check(self.confidence < 1, "confidence doit être < 1")
+        _positive("min_subperiods", self.min_subperiods)
+        _positive("min_assets", self.min_assets)
+        _positive("n_boot", self.n_boot)
+        _check(self.mean_block_days >= 1, "mean_block_days doit être ≥ 1")
+        _non_negative("seed", self.seed)
+
+
+@dataclass(frozen=True, slots=True)
 class LongtermConfig:
     universe: UniverseConfig
     signals: SignalsConfig
@@ -509,6 +534,7 @@ class LongtermConfig:
     rebalance: RebalanceConfig
     dca: DcaConfig
     costs: LtCostsConfig
+    acceptance: AcceptanceConfig
 
 
 @dataclass(frozen=True, slots=True)
