@@ -19,6 +19,7 @@ def test_tree_matches_documentation() -> None:
     assert p.reports == Path("/data/reports")
     assert p.lt_klines("1d", "BTCEUR") == Path("/data/lt/klines_1d/BTCEUR.parquet")
     assert p.lt_klines_dir("1h") == Path("/data/lt/klines_1h")
+    assert p.lt_futures("funding", "BTCUSDT") == Path("/data/lt/futures/funding/BTCUSDT.parquet")
     assert p.lt_klines("1h", "币安人生USDT").name == "币安人生USDT.parquet"
     assert p.raw_archive("binance_vision", "spot/monthly/klines/BTCEUR/1d/X.zip") == Path(
         "/data/raw/binance_vision/spot/monthly/klines/BTCEUR/1d/X.zip"
@@ -36,6 +37,7 @@ def test_documented_in_arborescence() -> None:
         "reports/",
         "raw/{source}/",
         "lt/{klines_1d|klines_1h}/{symbol}.parquet",
+        "lt/futures/{funding|metrics}/{symbol}.parquet",
     ):
         assert fragment in doc
 
@@ -61,3 +63,5 @@ def test_unsafe_archive_keys_rejected(key: str) -> None:
 def test_unsafe_symbols_rejected(symbol: str) -> None:
     with pytest.raises(ValueError, match="symbole invalide"):
         DataPaths(Path("/data")).lt_klines("1d", symbol)
+    with pytest.raises(ValueError, match="symbole invalide"):
+        DataPaths(Path("/data")).lt_futures("funding", symbol)

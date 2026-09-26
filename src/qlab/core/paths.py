@@ -21,6 +21,14 @@ def _name(kind: str, value: str) -> str:
     return value
 
 
+def _symbol_file(symbol: str) -> str:
+    """``{symbol}.parquet`` ; un symbole Binance peut être non latin : seul un nom qui sortirait
+    du dossier est refusé."""
+    if not symbol or symbol in (".", "..") or any(c in symbol for c in "/\\\0"):
+        raise ValueError(f"symbole invalide pour un chemin : {symbol!r}")
+    return f"{symbol}.parquet"
+
+
 @dataclass(frozen=True, slots=True)
 class DataPaths:
     """Chemins sous la racine des données (``base.data.root`` de la config)."""
@@ -59,11 +67,13 @@ class DataPaths:
 
     def lt_klines(self, interval: str, symbol: str) -> Path:
         """Bougies long terme d'une paire : ``lt/klines_{interval}/{symbol}.parquet``. Le symbole
-        vient de Binance (peut contenir des caractères non latins) : seul un nom qui sortirait
-        du dossier est refusé."""
-        if not symbol or symbol in (".", "..") or any(c in symbol for c in "/\\\0"):
-            raise ValueError(f"symbole invalide pour un chemin : {symbol!r}")
-        return self.lt_klines_dir(interval) / f"{symbol}.parquet"
+        vient de Binance (peut contenir des caractères non latins, cf. ``_symbol_file``)."""
+        return self.lt_klines_dir(interval) / _symbol_file(symbol)
+
+    def lt_futures(self, dataset: str, symbol: str) -> Path:
+        """Séries des contrats USDⓈ-M d'une paire : ``lt/futures/{dataset}/{symbol}.parquet``
+        (``dataset`` : ``funding``, ``metrics``)."""
+        return self.root / "lt" / "futures" / _name("dataset", dataset) / _symbol_file(symbol)
 
     @property
     def logs(self) -> Path:
