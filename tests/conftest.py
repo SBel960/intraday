@@ -28,6 +28,7 @@ BASE: dict[str, object] = {
         "binance_vision_url": "https://data.binance.vision",
         "binance_vision_list_url": "https://s3-ap-northeast-1.amazonaws.com/data.binance.vision",
         "tardis_url": "https://datasets.tardis.dev",
+        "tardis_api_url": "https://api.tardis.dev",
         "download_workers": 4,
         "list_workers": 4,
         "futures_metrics_symbols": ["BTCUSDT"],

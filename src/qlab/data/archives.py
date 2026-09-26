@@ -24,13 +24,14 @@ import argparse
 import hashlib
 import sys
 from collections.abc import Callable, Sequence
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from functools import partial
 
 from qlab.core import http
 from qlab.core.cli import Context, run_command
-from qlab.core.errors import DataError, ExchangeError
-from qlab.core.files import write_atomic
+from qlab.core.downloads import DownloadReport, Job, download_all
+from qlab.core.errors import DataError
 from qlab.core.paths import DataPaths
 from qlab.core.timeutils import date_str, now_ms
 from qlab.data import binance_vision as bv
@@ -39,18 +40,6 @@ from qlab.exchange.snapshots import SnapshotStore
 SOURCE = "binance_vision"
 DATASETS = ("klines", "funding", "metrics")
 Fetch = Callable[[str], bytes]
-
-
-@dataclass
-class SyncReport:
-    """Bilan d'une synchronisation (compteurs en nombre d'archives, octets téléchargés)."""
-
-    listed: int = 0
-    present: int = 0
-    downloaded: int = 0
-    downloaded_bytes: int = 0
-    republished: list[str] = field(default_factory=list)
-    failed: list[tuple[str, str]] = field(default_factory=list)
 
 
 def archive_prefixes(
@@ -103,8 +92,8 @@ def list_all(
         return sorted((f for files in found for f in files), key=lambda f: f.key)
 
 
-def download_one(archive: bv.ArchiveFile, base_url: str, paths: DataPaths, fetch: Fetch) -> int:
-    """Télécharge, vérifie (SHA-256, taille) et écrit une archive ; renvoie sa taille."""
+def fetch_verified(archive: bv.ArchiveFile, base_url: str, fetch: Fetch) -> bytes:
+    """Télécharge une archive et vérifie son SHA-256 d'après son ``.CHECKSUM``."""
     url = bv.file_url(base_url, archive.key)
     data = fetch(url)
     name = archive.key.rsplit("/", 1)[-1]
@@ -112,10 +101,7 @@ def download_one(archive: bv.ArchiveFile, base_url: str, paths: DataPaths, fetch
     actual = hashlib.sha256(data).hexdigest()
     if actual != expected:
         raise DataError(f"SHA-256 incorrect pour {name} : {actual[:12]}… ≠ {expected[:12]}…")
-    if len(data) != archive.size:
-        raise DataError(f"taille {len(data)} ≠ {archive.size} annoncée pour {name}")
-    write_atomic(paths.raw_archive(SOURCE, archive.relative_key), data)
-    return len(data)
+    return data
 
 
 def sync(
@@ -127,38 +113,22 @@ def sync(
     workers: int,
     dry_run: bool = False,
     progress: Callable[[str], None] = print,
-) -> SyncReport:
-    """Télécharge les archives absentes, en parallèle ; une archive en échec n'arrête pas les
-    autres (listée dans ``failed``, retentée au prochain passage)."""
-    report = SyncReport(listed=len(archives))
-    todo = []
+) -> DownloadReport:
+    """Obtient les archives absentes via ``core/downloads`` (parallèle, vérifié, atomique).
+
+    Une clé reçue du serveur qui sortirait du dossier est écartée et listée en échec.
+    """
+    jobs, rejected = [], []
     for a in archives:
         try:
-            local = paths.raw_archive(SOURCE, a.relative_key)
-        except ValueError as exc:  # clé reçue du serveur qui sortirait du dossier : écartée
-            report.failed.append((a.key, str(exc)))
+            dest = paths.raw_archive(SOURCE, a.relative_key)
+        except ValueError as exc:
+            rejected.append((a.key, str(exc)))
             continue
-        if not local.exists():
-            todo.append(a)
-        elif local.stat().st_size == a.size:
-            report.present += 1
-        else:
-            report.republished.append(a.key)
-    if dry_run or not todo:
-        return report
-    step = max(1, len(todo) // 20)
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(download_one, a, base_url, paths, fetch): a for a in todo}
-        for i, fut in enumerate(as_completed(futures), start=1):
-            try:
-                report.downloaded_bytes += fut.result()
-                report.downloaded += 1
-            except (DataError, ExchangeError) as exc:
-                report.failed.append((futures[fut].key, str(exc)))
-            if i % step == 0 or i == len(todo):
-                progress(
-                    f"  {i}/{len(todo)} archives traitées ({report.downloaded_bytes / 1e6:.1f} Mo)"
-                )
+        jobs.append(Job(a.key, dest, partial(fetch_verified, a, base_url, fetch), a.size))
+    report = download_all(jobs, workers=workers, dry_run=dry_run, progress=progress)
+    report.listed += len(rejected)
+    report.failed[:0] = rejected
     return report
 
 
@@ -198,16 +168,15 @@ def _selection(ctx: Context) -> _Selection:
     return _Selection(datasets, symbols, None if cfg.observe.include_delisted else active, active)
 
 
-def _report(ctx: Context, sel: _Selection, report: SyncReport) -> None:
+def _report(ctx: Context, sel: _Selection, report: DownloadReport) -> None:
     dry_run = ctx.args.dry_run
-    missing = report.listed - report.present - len(report.republished)
     done = (
         " (simulation)"
         if dry_run
         else f" ; téléchargées : {report.downloaded} ({report.downloaded_bytes / 1e6:.1f} Mo)"
     )
-    print(f"Déjà présentes : {report.present} ; à télécharger : {missing}{done}")
-    for key in report.republished:
+    print(f"Déjà présentes : {report.present} ; à télécharger : {report.missing}{done}")
+    for key in report.changed:
         print(
             f"ATTENTION : republiée avec une autre taille, ancienne gardée : {key}", file=sys.stderr
         )
@@ -221,7 +190,7 @@ def _report(ctx: Context, sel: _Selection, report: SyncReport) -> None:
             "present": report.present,
             "downloaded": report.downloaded,
             "bytes": report.downloaded_bytes,
-            "republished": list(report.republished[:100]),
+            "republished": list(report.changed[:100]),
             "failed": list(k for k, _ in report.failed[:100]),
             "dry_run": dry_run,
         },

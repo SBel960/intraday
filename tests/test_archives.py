@@ -8,11 +8,12 @@ from pathlib import Path
 import pytest
 from fakes import FakeVision
 
+from qlab.core.downloads import DownloadReport
 from qlab.core.errors import DataError, ExchangeError
 from qlab.core.jsonlog import read_log
 from qlab.core.paths import DataPaths
 from qlab.data import archives
-from qlab.data.archives import SyncReport, archive_prefixes, download_one, list_all, sync
+from qlab.data.archives import archive_prefixes, fetch_verified, list_all, sync
 from qlab.data.binance_vision import ArchiveFile
 
 M = "data/spot/monthly/klines"
@@ -46,7 +47,7 @@ def _remote(vision: FakeVision, **kwargs: object) -> list[ArchiveFile]:
 
 def _sync(
     vision: FakeVision, paths: DataPaths, files: list[ArchiveFile], *, dry_run: bool = False
-) -> SyncReport:
+) -> DownloadReport:
     return sync(
         files,
         base_url=vision.base_url,
@@ -110,28 +111,26 @@ def test_selection_filters() -> None:
 def test_download_verified_and_placed(tmp_path: Path) -> None:
     vision, paths = FakeVision(CONTENT), DataPaths(tmp_path)
     key = f"{M}/BTCUSDT/1d/BTCUSDT-1d-2024-01.zip"
-    assert download_one(ArchiveFile(key, 14), vision.base_url, paths, vision) == 14
+    report = _sync(vision, paths, [ArchiveFile(key, 14)])
+    assert (report.downloaded, report.downloaded_bytes) == (1, 14)
     local = tmp_path / "raw" / "binance_vision" / key.removeprefix("data/")
     assert local.read_bytes() == b"btc-1d-janvier"
 
 
 def test_bad_checksum_writes_nothing(tmp_path: Path) -> None:
     key = f"{M}/BTCUSDT/1d/BTCUSDT-1d-2024-01.zip"
-    vision, paths = FakeVision(CONTENT, bad_checksum={key}), DataPaths(tmp_path)
+    vision = FakeVision(CONTENT, bad_checksum={key})
     with pytest.raises(DataError, match="SHA-256 incorrect"):
-        download_one(ArchiveFile(key, 14), vision.base_url, paths, vision)
+        fetch_verified(ArchiveFile(key, 14), vision.base_url, vision)
+    report = _sync(vision, DataPaths(tmp_path), [ArchiveFile(key, 14)])
+    assert [k for k, _ in report.failed] == [key]
     assert not (tmp_path / "raw").exists()
 
 
 def test_size_mismatch_writes_nothing(tmp_path: Path) -> None:
-    vision, paths = FakeVision(CONTENT), DataPaths(tmp_path)
-    with pytest.raises(DataError, match="taille"):
-        download_one(
-            ArchiveFile(f"{M}/BTCUSDT/1d/BTCUSDT-1d-2024-01.zip", 999),
-            vision.base_url,
-            paths,
-            vision,
-        )
+    key = f"{M}/BTCUSDT/1d/BTCUSDT-1d-2024-01.zip"
+    report = _sync(FakeVision(CONTENT), DataPaths(tmp_path), [ArchiveFile(key, 999)])
+    assert "taille 14 ≠ 999" in report.failed[0][1]
     assert not (tmp_path / "raw").exists()
 
 
@@ -172,7 +171,7 @@ def test_republished_archive_is_never_overwritten(tmp_path: Path) -> None:
     _sync(vision, paths, _remote(vision))
     changed = FakeVision({**CONTENT, key: b"version-corrigee-plus-longue"})
     report = _sync(changed, paths, _remote(changed))
-    assert report.republished == [key]
+    assert report.changed == [key]
     local = paths.raw_archive("binance_vision", key.removeprefix("data/"))
     assert local.read_bytes() == b"btc-1d-janvier"  # RAW jamais modifié
 

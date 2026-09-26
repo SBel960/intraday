@@ -161,7 +161,8 @@ class ExchangeConfig:
 @dataclass(frozen=True, slots=True)
 class ArchivesConfig:
     """Archives publiques. ``binance_vision_list_url`` : listage S3 (pagination XML) des
-    fichiers publiés sous ``binance_vision_url``. ``download_workers`` : téléchargements
+    fichiers publiés sous ``binance_vision_url``. ``tardis_api_url`` : métadonnées Tardis (dates
+    de disponibilité par paire). ``download_workers`` : téléchargements
     simultanés ; ``list_workers`` : listages simultanés (légers : réponses de quelques Ko).
     ``futures_metrics_symbols`` : paires USDⓈ-M dont on prend les métriques
     quotidiennes (un fichier par jour : limité à une liste ; le financement, mensuel, est pris
@@ -170,6 +171,7 @@ class ArchivesConfig:
     binance_vision_url: str
     binance_vision_list_url: str
     tardis_url: str
+    tardis_api_url: str
     download_workers: int
     list_workers: int
     futures_metrics_symbols: tuple[str, ...]
@@ -178,6 +180,7 @@ class ArchivesConfig:
         _url("binance_vision_url", self.binance_vision_url, "https")
         _url("binance_vision_list_url", self.binance_vision_list_url, "https")
         _url("tardis_url", self.tardis_url, "https")
+        _url("tardis_api_url", self.tardis_api_url, "https")
         _check(1 <= self.download_workers <= 32, "download_workers doit être dans [1, 32]")
         _check(1 <= self.list_workers <= 64, "list_workers doit être dans [1, 64]")
         _unique("futures_metrics_symbols", self.futures_metrics_symbols)

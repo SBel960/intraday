@@ -3,8 +3,9 @@
 Tout accès réseau du projet (``exchangeInfo``, archives, bougies REST…) passe par ``get`` :
 une seule politique de relance, testée une fois.
 
-- réseau coupé, délai dépassé, HTTP 5xx : nouvel essai **sans fin**, attente 2, 4, 8… s
-  plafonnée à ``MAX_BACKOFF_S`` (on attend que l'ordinateur retrouve la connexion) ;
+- réseau coupé (y compris en plein transfert), délai dépassé, HTTP 5xx : nouvel essai
+  **sans fin**, attente 2, 4, 8… s plafonnée à ``MAX_BACKOFF_S`` (on attend que l'ordinateur
+  retrouve la connexion) ;
 - HTTP 429 : attente du délai ``Retry-After`` demandé par Binance, puis reprise ;
 - HTTP 418 (IP bannie) et autres 4xx : arrêt immédiat (``ExchangeError``), insister aggraverait ;
 - Ctrl-C interrompt toujours l'attente.
@@ -14,6 +15,7 @@ une seule politique de relance, testée une fois.
 
 from __future__ import annotations
 
+import http.client
 import sys
 import time
 import urllib.error
@@ -27,6 +29,8 @@ from qlab.core.errors import ExchangeError
 from qlab.core.timeutils import now_ms
 
 TIMEOUT_S = 30
+# Pannes passagères : réseau coupé, délai dépassé, coupure en plein transfert (IncompleteRead…).
+_TRANSIENT = (urllib.error.URLError, TimeoutError, ConnectionError, http.client.HTTPException)
 MAX_BACKOFF_S = 60  # attente maximale entre deux essais quand le réseau est coupé
 RATE_LIMIT_WAIT_S = 60  # attente si Binance renvoie 429 sans Retry-After
 
@@ -129,7 +133,13 @@ def get(
                     f"HTTP {exc.code} sur {_public(url)}{_error_detail(exc)}"
                 ) from exc
             reason = f"erreur serveur (HTTP {exc.code})"
-        except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
+        # Coupure en plein transfert (IncompleteRead, réponse illisible…) : aussi passagère.
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            ConnectionError,
+            http.client.HTTPException,
+        ) as exc:
             reason = f"réseau indisponible ({exc})"
         wait_s = min(MAX_BACKOFF_S, 2**attempt)
         notify(f"{reason} : essai {attempt} échoué, nouvel essai dans {wait_s} s")

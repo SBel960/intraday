@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client as http_client
 import io
 import itertools
 import urllib.error
@@ -166,3 +167,12 @@ def test_error_shows_binance_message_but_not_query() -> None:
     message = str(err.value)
     assert "-1021" in message and "recvWindow" in message
     assert "SECRETSIG" not in message and "timestamp=" not in message
+
+
+def test_connection_cut_mid_transfer_is_retried() -> None:
+    """Coupure au milieu d'un fichier (5,3 Mo reçus sur 12,2 Mo, vu sur Tardis) : on réessaie."""
+    cut = http_client.IncompleteRead(b"x" * 10, 20)
+    flaky = Flaky([cut, http_client.RemoteDisconnected("fermé")])
+    assert flaky.get().attempts == 3
+    assert flaky.waits == [2, 4]
+    assert "réseau indisponible" in flaky.messages[0]
