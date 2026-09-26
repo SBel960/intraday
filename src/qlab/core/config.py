@@ -16,17 +16,14 @@ import argparse
 import dataclasses
 import itertools
 import json
-import math
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, get_args, get_origin, get_type_hints
 
-import yaml
-
-from qlab.core.errors import QlabError, run_cli
+from qlab.core.errors import run_cli
+from qlab.core.yamlschema import SchemaError, build, read_yaml
 
 BASE_FILE = "base.yaml"
 INTRADAY_FILE = "intraday.yaml"
@@ -34,7 +31,7 @@ LONGTERM_FILE = "longterm.yaml"
 MINUTES_PER_DAY = 1440
 
 
-class ConfigError(QlabError, ValueError):
+class ConfigError(SchemaError):
     """Configuration absente, incomplète, mal typée ou hors domaine."""
 
 
@@ -496,88 +493,16 @@ class QlabConfig:
     longterm: LongtermConfig
 
 
-# --- conversion YAML → dataclasses -------------------------------------------------------
-
-
-def _scalar(tp: type, value: object, path: str) -> object:
-    """Valeur scalaire stricte : un booléen n'est pas un entier, un entier devient un float."""
-    ok = {
-        bool: isinstance(value, bool),
-        int: isinstance(value, int) and not isinstance(value, bool),
-        float: isinstance(value, int | float) and not isinstance(value, bool),
-        str: isinstance(value, str),
-        Path: isinstance(value, str),
-    }
-    if tp not in ok:
-        raise TypeError(f"{path} : type d'annotation non géré {tp!r}")
-    if not ok[tp]:
-        raise ConfigError(
-            f"{path} : {tp.__name__} attendu, reçu {type(value).__name__} ({value!r})"
-        )
-    if tp is float:
-        number = float(value)  # type: ignore[arg-type]  # vérifié ci-dessus
-        if not math.isfinite(number):
-            raise ConfigError(f"{path} : nombre fini attendu, reçu {value}")
-        return number
-    if isinstance(value, str) and not value.strip():
-        raise ConfigError(f"{path} : chaîne vide")
-    return Path(value).expanduser() if tp is Path else value  # type: ignore[arg-type]
-
-
-def _convert(tp: Any, value: object, path: str) -> object:
-    """Convertit ``value`` vers le type annoté ``tp`` : liste → tuple, table → dataclass,
-    sinon scalaire strict (``_scalar``)."""
-    if get_origin(tp) is tuple:
-        if not isinstance(value, list):
-            raise ConfigError(f"{path} : liste attendue, reçu {type(value).__name__}")
-        item_tp = get_args(tp)[0]
-        return tuple(_convert(item_tp, v, f"{path}[{i}]") for i, v in enumerate(value))
-    if isinstance(tp, type) and is_dataclass(tp):
-        return _build(tp, value, path)
-    return _scalar(tp, value, path)
-
-
-def _build[T](cls: type[T], raw: object, path: str) -> T:
-    """Construit la dataclass ``cls`` depuis un dict YAML ; clés manquantes/inconnues interdites."""
-    if not isinstance(raw, dict):
-        raise ConfigError(f"{path} : table attendue, reçu {type(raw).__name__}")
-    hints = get_type_hints(cls)
-    names = [f.name for f in fields(cls)]  # type: ignore[arg-type]
-    keys = {str(k) for k in raw}
-    missing = [n for n in names if n not in keys]
-    unknown = sorted(keys - set(names))
-    if missing:
-        raise ConfigError(f"{path} : clé(s) manquante(s) {missing}")
-    if unknown:
-        raise ConfigError(f"{path} : clé(s) inconnue(s) {unknown}")
-    kwargs = {n: _convert(hints[n], raw[n], f"{path}.{n}") for n in names}
-    try:
-        return cls(**kwargs)
-    except ConfigError as exc:
-        raise ConfigError(f"{path} : {exc}") from exc
-
-
-def _read_yaml(path: Path) -> object:
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise ConfigError(f"lecture impossible de {path} : {exc}") from exc
-    try:
-        return yaml.safe_load(text)
-    except yaml.YAMLError as exc:
-        raise ConfigError(f"YAML invalide dans {path} : {exc}") from exc
-
-
 def load_base(path: Path) -> BaseConfig:
-    return _build(BaseConfig, _read_yaml(path), "base")
+    return build(BaseConfig, read_yaml(path, error=ConfigError), "base", error=ConfigError)
 
 
 def load_intraday(path: Path) -> IntradayConfig:
-    return _build(IntradayConfig, _read_yaml(path), "intraday")
+    return build(IntradayConfig, read_yaml(path, error=ConfigError), "intraday", error=ConfigError)
 
 
 def load_longterm(path: Path) -> LongtermConfig:
-    return _build(LongtermConfig, _read_yaml(path), "longterm")
+    return build(LongtermConfig, read_yaml(path, error=ConfigError), "longterm", error=ConfigError)
 
 
 def load_config(config_dir: Path) -> QlabConfig:

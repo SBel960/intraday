@@ -1,0 +1,31 @@
+# Modèle de fiche d'hypothèse. Copier en hypotheses/<id>.yaml, remplir AVANT tout test,
+# puis ne plus modifier : l'empreinte de la fiche est gardée avec chaque essai.
+# Valider : python -m qlab.research.hypothesis --config config check hypotheses/<id>.yaml
+
+id: _template                       # = nom du fichier, en [a-z0-9_]+
+title: Titre court de l'hypothèse
+volet: longterm                     # longterm | intraday
+created: "2026-09-26"               # date d'écriture (AVANT de voir le moindre résultat)
+
+# Pourquoi ça marcherait : quel comportement des participants ou quelle contrainte de marché
+# crée l'avantage, et pourquoi il ne disparaît pas dès qu'il est connu.
+mechanism: >-
+  Décrire en une ou deux phrases le mécanisme économique supposé, pas seulement la règle.
+
+horizon_s: 2592000                  # détention typique en secondes (30 jours = 2 592 000)
+universe: trade                     # trade (paires tradées) | observe (tout le marché)
+features: [close_1d]                # données utilisées
+
+# Grille des paramètres candidats : CHAQUE combinaison essayée est un essai compté pour le
+# Deflated Sharpe. Nombre d'essais = produit des nombres de valeurs. Liste vide : 1 essai.
+parameters:
+  - name: lookback_days
+    values: [30, 90]
+
+cost_round_trip_frac: 0.002         # coût aller-retour estimé (fraction)
+min_edge_frac: 0.05                 # edge minimal requis
+edge_basis: per_year                # per_trade | per_year
+
+# Quand abandonner, sans négocier après coup.
+abandon: >-
+  Critère d'abandon mesurable, ex. DSR < 0,95 ou edge net ≤ 0 après coûts, ou plus de N essais.
