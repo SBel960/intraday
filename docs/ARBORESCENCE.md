@@ -110,7 +110,7 @@ intraday/
 │   │   ├── ic.py                  IC Spearman par horizon et décroissance ; IC transversal (actifs comparés entre eux, date par date) moyenné avec t-stat Newey–West
 │   │   └── report.py              critères d'acceptation (DSR, écart de Sharpe bootstrap, sous-périodes dont baissière, actifs, MinTRL, paper) → verdict + Markdown
 │   ├── sizing/
-│   │   └── sizing.py              vol targeting, Kelly (information, plafonné à 0,25 f*), limites de risque
+│   │   └── sizing.py              volatilité cible (réduit le risque, jamais de levier, fenêtre complète exigée), Kelly (information, plafonné à 0,25 f* et à la limite)
 │   ├── backtest/
 │   │   ├── events.py              fusion ordonnée des flux, latences données / ordre paramétrables
 │   │   ├── fills.py               taker (slippage selon la profondeur) ; maker (traversée stricte, position en queue)
@@ -213,7 +213,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 40 | 3 · Long terme | `longterm/allocation.py` | validé |
 | 41 | 3 · Long terme | `longterm/lt_costs.py` (règle des rejets : non réalisable au-delà de `max_rejected_share` du volume voulu) | validé |
 | 41 bis | 3 · Long terme | `longterm/strategies.py` (+ `core/config.py` : `trading_days_per_year`) | validé |
-| 42 | 3 · Long terme | `sizing/sizing.py` | à faire |
+| 42 | 3 · Long terme | `sizing/sizing.py` | validé |
 | 43 | 3 · Long terme | `longterm/lt_backtest.py` | à faire |
 | 44 | 3 · Long terme | `longterm/lt_report.py` | à faire |
 | 45 | 4 · Paper LT | `live/risk.py` | à faire |
