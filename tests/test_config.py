@@ -206,6 +206,7 @@ def test_data_root_symlink_to_mnt_rejected(config_dir: Path, tmp_path: Path) -> 
         (["exchanges", 0, "fees", "bnb_discount_frac"], 1.0, "bnb_discount_frac"),
         (["exchanges", 0, "snapshot_refresh_hours"], 0, "snapshot_refresh_hours"),
         (["exchanges", 0, "max_clock_offset_ms"], 0, "max_clock_offset_ms"),
+        (["exchanges", 0, "trading_days_per_year"], 0, "trading_days_per_year"),
         (["archives", "download_workers"], 0, r"download_workers doit être dans \[1, 32\]"),
         (["archives", "download_workers"], 33, "download_workers"),
         (["archives", "list_workers"], 65, "list_workers"),

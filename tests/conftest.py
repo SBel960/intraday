@@ -22,6 +22,7 @@ BASE: dict[str, object] = {
             },
             "snapshot_refresh_hours": 24,
             "max_clock_offset_ms": 500,
+            "trading_days_per_year": 365,
         }
     ],
     "archives": {

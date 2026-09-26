@@ -135,7 +135,9 @@ class FeesConfig:
 class ExchangeConfig:
     """Un échange. ``snapshot_refresh_hours`` : âge au-delà duquel ``exchange_info fetch
     --if-due`` reprend un snapshot. ``max_clock_offset_ms`` : écart toléré entre l'horloge
-    locale et celle du serveur ; au-delà, alerte (journal, puis refus des modules sensibles)."""
+    locale et celle du serveur ; au-delà, alerte (journal, puis refus des modules sensibles).
+    ``trading_days_per_year`` : calendrier du marché (crypto 24/7 : tous les jours ; actions :
+    environ 252 séances) — annualisations et fenêtres « 1 an », jamais écrites dans le code."""
 
     name: str
     rest_url: str
@@ -143,6 +145,7 @@ class ExchangeConfig:
     fees: FeesConfig
     snapshot_refresh_hours: int
     max_clock_offset_ms: int
+    trading_days_per_year: int
 
     def __post_init__(self) -> None:
         _check(
@@ -153,6 +156,7 @@ class ExchangeConfig:
         _url("ws_url", self.ws_url, "wss")
         _positive("snapshot_refresh_hours", self.snapshot_refresh_hours)
         _positive("max_clock_offset_ms", self.max_clock_offset_ms)
+        _positive("trading_days_per_year", self.trading_days_per_year)
 
 
 @dataclass(frozen=True, slots=True)

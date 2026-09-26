@@ -19,6 +19,7 @@ exchanges:
       pay_in_bnb: false
     snapshot_refresh_hours: 24         # exchange_info fetch --if-due : nouveau snapshot si plus vieux
     max_clock_offset_ms: 500           # écart d'horloge local / serveur toléré (mesuré à chaque fetch)
+    trading_days_per_year: 365         # crypto : marché ouvert tous les jours (annualisation, « 1 an »)
 
 archives:
   binance_vision_url: https://data.binance.vision
