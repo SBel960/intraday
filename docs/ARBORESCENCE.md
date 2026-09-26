@@ -103,7 +103,7 @@ intraday/
 │   ├── research/
 │   │   ├── hypothesis.py          fiches d'hypothèse : lecture stricte, grille de paramètres (n_trials déclaré d'avance), empreinte du contenu
 │   │   ├── trials.py              registre d'essais : combinaisons déclarées seulement, fiche figée (empreinte), N distinct par volet, stats pour le DSR
-│   │   ├── stats.py               Sharpe annualisé, Lo 2002, Newey–West, PSR, DSR, MinTRL, test binomial ; puissance (Sharpe minimal détectable), contrôle des fausses découvertes (Benjamini-Hochberg)
+│   │   ├── stats.py               moments, Sharpe annualisé, Lo 2002, Newey–West, PSR, DSR (vérifié sur l'exemple publié), MinTRL, test binomial, Sharpe minimal détectable, Benjamini-Hochberg
 │   │   ├── bootstrap.py           stationary bootstrap (Politis–Romano), graine fixée
 │   │   ├── cv.py                  purged K-fold + embargo, walk-forward (fenêtre glissante ou expansive)
 │   │   ├── ic.py                  IC Spearman par horizon et décroissance ; IC transversal (actifs comparés entre eux, date par date) moyenné avec t-stat Newey–West
@@ -196,7 +196,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 28 | 2 · Recherche | `research/hypothesis.py` (+ `hypotheses/_template.yaml`) | validé |
 | 29 | 2 · Recherche | `hypotheses/lt_*.yaml` : 7 fiches de la vague 1, écrites avant tout test (19 essais) | validé (figées) |
 | 30 | 2 · Recherche | `research/trials.py` | validé |
-| 31 | 2 · Recherche | `research/stats.py` | à faire |
+| 31 | 2 · Recherche | `research/stats.py` | validé |
 | 32 | 2 · Recherche | `research/bootstrap.py` | à faire |
 | 33 | 2 · Recherche | `research/cv.py` | à faire |
 | 34 | 2 · Recherche | `research/ic.py` (remonté de l'intraday ; version transversale) | à faire |

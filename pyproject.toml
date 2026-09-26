@@ -34,6 +34,10 @@ strict = true
 python_version = "3.12"
 files = ["src", "tests"]
 
+[[tool.mypy.overrides]]
+module = ["scipy", "scipy.*"]  # scipy ne publie pas ses annotations de types
+ignore_missing_imports = true
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
