@@ -53,13 +53,17 @@ class DataPaths:
             raise ValueError(f"clé d'archive invalide pour un chemin : {key!r}")
         return self.root / "raw" / _name("source", source) / key
 
+    def lt_klines_dir(self, interval: str) -> Path:
+        """Dossier des bougies long terme d'un intervalle : ``lt/klines_{interval}/``."""
+        return self.root / "lt" / f"klines_{_name('intervalle', interval)}"
+
     def lt_klines(self, interval: str, symbol: str) -> Path:
         """Bougies long terme d'une paire : ``lt/klines_{interval}/{symbol}.parquet``. Le symbole
         vient de Binance (peut contenir des caractères non latins) : seul un nom qui sortirait
         du dossier est refusé."""
         if not symbol or symbol in (".", "..") or any(c in symbol for c in "/\\\0"):
             raise ValueError(f"symbole invalide pour un chemin : {symbol!r}")
-        return self.root / "lt" / f"klines_{_name('intervalle', interval)}" / f"{symbol}.parquet"
+        return self.lt_klines_dir(interval) / f"{symbol}.parquet"
 
     @property
     def logs(self) -> Path:

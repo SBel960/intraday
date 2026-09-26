@@ -399,10 +399,29 @@ class IntradayConfig:
 
 @dataclass(frozen=True, slots=True)
 class UniverseConfig:
+    """Univers point-in-time (``longterm/universe.py``).
+
+    ``warmup_days`` : chauffe après la première bougie. Univers observé : un actif = une paire,
+    cotée dans la première devise de ``reference_quotes`` disponible ce jour-là ; bases de
+    ``excluded_bases`` (stablecoins, devises) et tokens à levier (base = autre base +
+    ``leveraged_suffixes``) exclus ; liquidité : volume médian sur ``volume_lookback_days``
+    ≥ ``min_volume_quote`` (en devise de cotation, donc ≈ dollars).
+    """
+
     warmup_days: int
+    reference_quotes: tuple[str, ...]
+    excluded_bases: tuple[str, ...]
+    leveraged_suffixes: tuple[str, ...]
+    volume_lookback_days: int
+    min_volume_quote: float
 
     def __post_init__(self) -> None:
         _non_negative("warmup_days", self.warmup_days)
+        _check(len(self.reference_quotes) > 0, "reference_quotes ne doit pas être vide")
+        for name in ("reference_quotes", "excluded_bases", "leveraged_suffixes"):
+            _unique(name, getattr(self, name))
+        _positive("volume_lookback_days", self.volume_lookback_days)
+        _positive("min_volume_quote", self.min_volume_quote)
 
 
 @dataclass(frozen=True, slots=True)

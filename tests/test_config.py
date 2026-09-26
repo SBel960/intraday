@@ -292,6 +292,10 @@ def test_intraday_domain(config_dir: Path, keys: list[str | int], value: Any, ms
         (["costs", "fallback_spread_frac"], 0, "fallback_spread_frac"),
         (["costs", "max_drag_edge_fraction"], 0, "max_drag_edge_fraction"),
         (["universe", "warmup_days"], -1, "warmup_days"),
+        (["universe", "reference_quotes"], [], "reference_quotes"),
+        (["universe", "excluded_bases"], ["EUR", "EUR"], "excluded_bases"),
+        (["universe", "volume_lookback_days"], 0, "volume_lookback_days"),
+        (["universe", "min_volume_quote"], 0, "min_volume_quote"),
     ],
 )
 def test_longterm_domain(config_dir: Path, keys: list[str | int], value: Any, msg: str) -> None:

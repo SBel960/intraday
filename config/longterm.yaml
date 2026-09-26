@@ -3,6 +3,14 @@
 
 universe:
   warmup_days: 30                    # chauffe après la première cotation avant d'entrer dans l'univers
+  # Univers OBSERVÉ : un actif = une paire en dollar (stablecoin), la première disponible ce jour-là.
+  reference_quotes: [USDT, BUSD, USDC, FDUSD, TUSD, USDP, PAX]
+  # Pas des actifs : stablecoins et devises (PAXG, adossé à l'or, reste un actif).
+  excluded_bases: [USDT, BUSD, USDC, FDUSD, TUSD, TUSDB, USDP, PAX, DAI, UST, SUSD, USDS, USDSB,
+                   USDSOLD, USD1, USDE, RLUSD, BFUSD, XUSD, VAI, EUR, AEUR, EURI, GBP, BGBP, AUD]
+  leveraged_suffixes: [UP, DOWN, BULL, BEAR]   # BTCUP = BTC + UP ; JUP, SYRUP gardés (J, SYR : pas des bases)
+  volume_lookback_days: 30
+  min_volume_quote: 1000000          # volume médian quotidien ≥ 1 M$ (décidé le 2026-09-26, avant tout test)
 
 signals:
   momentum_lookbacks_days: [30, 60, 90, 180, 365]

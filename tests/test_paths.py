@@ -18,6 +18,7 @@ def test_tree_matches_documentation() -> None:
     assert p.logs == Path("/data/logs")
     assert p.reports == Path("/data/reports")
     assert p.lt_klines("1d", "BTCEUR") == Path("/data/lt/klines_1d/BTCEUR.parquet")
+    assert p.lt_klines_dir("1h") == Path("/data/lt/klines_1h")
     assert p.lt_klines("1h", "币安人生USDT").name == "币安人生USDT.parquet"
     assert p.raw_archive("binance_vision", "spot/monthly/klines/BTCEUR/1d/X.zip") == Path(
         "/data/raw/binance_vision/spot/monthly/klines/BTCEUR/1d/X.zip"

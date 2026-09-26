@@ -69,7 +69,14 @@ INTRADAY: dict[str, object] = {
 }
 
 LONGTERM: dict[str, object] = {
-    "universe": {"warmup_days": 30},
+    "universe": {
+        "warmup_days": 30,
+        "reference_quotes": ["USDT", "BUSD"],
+        "excluded_bases": ["USDC", "EUR"],
+        "leveraged_suffixes": ["UP", "DOWN"],
+        "volume_lookback_days": 30,
+        "min_volume_quote": 1_000_000.0,
+    },
     "signals": {
         "momentum_lookbacks_days": [30, 90],
         "ma_fast_days": [10, 20],
