@@ -23,9 +23,6 @@ Commande : ``python -m qlab.core.ledger --config config {show|deposit|withdrawal
 from __future__ import annotations
 
 import argparse
-import fcntl
-import json
-import os
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -36,6 +33,7 @@ from typing import Literal, cast
 from qlab.core.cli import Context, run_command
 from qlab.core.errors import DataError
 from qlab.core.money import check_amount, format_amount, parse_amount
+from qlab.core.records import Record, append_record, read_records
 from qlab.core.timeutils import date_to_ms, ms_to_iso, now_ms
 
 FlowKind = Literal["deposit", "withdrawal"]
@@ -81,8 +79,9 @@ class Flow:
         """+montant pour un apport, −montant pour un retrait."""
         return self.amount_quote if self.kind == "deposit" else -self.amount_quote
 
-    def to_line(self) -> bytes:
-        record = {
+    def to_record(self) -> dict[str, object]:
+        """Enregistrement du registre (montants en texte : jamais de flottant)."""
+        return {
             "ts_ms": self.ts_ms,
             "kind": self.kind,
             "amount_quote": format_amount(self.amount_quote),
@@ -90,22 +89,12 @@ class Flow:
             "amount_fiat": None if self.amount_fiat is None else format_amount(self.amount_fiat),
             "fiat": self.fiat,
         }
-        text = json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-        try:
-            return (text + "\n").encode("utf-8")
-        except UnicodeEncodeError as exc:  # ex. demi-caractère UTF-16 isolé dans la note
-            raise DataError(f"texte non encodable en UTF-8 : {exc.reason}") from exc
 
 
-def _parse_line(raw: bytes, n: int, path: Path) -> Flow:
+def _parse(obj: Record, n: int, path: Path) -> Flow:
+    """Un enregistrement lu → ``Flow`` validé ; erreurs avec le numéro de ligne."""
     where = f"{path}, ligne {n}"
-    if not raw.endswith(b"\n"):
-        raise DataError(f"{where} : ligne tronquée (pas de fin de ligne)")
-    try:
-        obj = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError) as exc:
-        raise DataError(f"{where} : JSON illisible") from exc
-    if not isinstance(obj, dict) or set(obj) != _FIELDS:
+    if set(obj) != _FIELDS:
         raise DataError(f"{where} : champs attendus {sorted(_FIELDS)}")
     fiat_text = obj["amount_fiat"]
     if not isinstance(obj["amount_quote"], str) or not isinstance(fiat_text, str | None):
@@ -124,6 +113,17 @@ def _parse_line(raw: bytes, n: int, path: Path) -> Flow:
         raise DataError(f"{where} : {exc}") from exc
 
 
+def _flows(records: list[Record], path: Path) -> tuple[Flow, ...]:
+    """Enregistrements → flux validés, dans l'ordre chronologique (sinon ``DataError``)."""
+    flows: list[Flow] = []
+    for n, obj in enumerate(records, start=1):
+        flow = _parse(obj, n, path)
+        if flows and flow.ts_ms < flows[-1].ts_ms:
+            raise DataError(f"{path}, ligne {n} : flux antérieur au précédent")
+        flows.append(flow)
+    return tuple(flows)
+
+
 class Ledger:
     """Registre stocké dans ``path`` (créé au premier ajout, dossiers parents compris)."""
 
@@ -132,47 +132,21 @@ class Ledger:
 
     def flows(self) -> tuple[Flow, ...]:
         """Tous les flux, validés, dans l'ordre du fichier ; ``()`` si le registre n'existe pas."""
-        if not self.path.exists():
-            return ()
-        flows: list[Flow] = []
-        with self.path.open("rb") as f:
-            for n, raw in enumerate(f, start=1):
-                flow = _parse_line(raw, n, self.path)
-                if flows and flow.ts_ms < flows[-1].ts_ms:
-                    raise DataError(f"{self.path}, ligne {n} : flux antérieur au précédent")
-                flows.append(flow)
-        return tuple(flows)
+        return _flows(read_records(self.path), self.path)
 
     def append(self, flow: Flow) -> None:
-        """Ajoute ``flow`` sous verrou exclusif : relecture et validation, écriture, ``fsync``.
+        """Ajoute ``flow`` (``core/records`` : verrou, relecture, ``fsync``) ; refuse un flux
+        antérieur au dernier : le registre est chronologique."""
 
-        Un second écrivain (autre commande lancée en même temps) attend la fin du premier, ce
-        qui garantit le contrôle chronologique. À la création du fichier, le dossier est aussi
-        ``fsync`` pour que l'entrée de répertoire survive à une coupure.
-        """
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        created = not self.path.exists()
-        line = flow.to_line()
-        fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX)  # libéré par os.close
-            existing = self.flows()
-            if existing and flow.ts_ms < existing[-1].ts_ms:
+        def chronological(existing: list[Record]) -> None:
+            flows = _flows(existing, self.path)
+            if flows and flow.ts_ms < flows[-1].ts_ms:
                 raise DataError(
                     f"flux au {ms_to_iso(flow.ts_ms)} antérieur au dernier "
-                    f"({ms_to_iso(existing[-1].ts_ms)}) : le registre est chronologique"
+                    f"({ms_to_iso(flows[-1].ts_ms)}) : le registre est chronologique"
                 )
-            if os.write(fd, line) != len(line):
-                raise OSError(f"écriture partielle dans {self.path}")
-            os.fsync(fd)
-        finally:
-            os.close(fd)
-        if created:
-            dir_fd = os.open(self.path.parent, os.O_RDONLY)
-            try:
-                os.fsync(dir_fd)
-            finally:
-                os.close(dir_fd)
+
+        append_record(self.path, flow.to_record(), precheck=chronological)
 
     def net_deposits_quote(self, at_ms: int | None = None) -> Decimal:
         """Apports − retraits jusqu'à ``at_ms`` inclus (tout le registre si ``None``).

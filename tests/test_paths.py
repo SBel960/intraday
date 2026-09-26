@@ -13,6 +13,7 @@ def test_tree_matches_documentation() -> None:
     p = DataPaths(Path("/data"))
     assert p.meta == Path("/data/meta")
     assert p.ledger == Path("/data/meta/ledger.jsonl")
+    assert p.trials == Path("/data/meta/trials.jsonl")
     assert p.exchange_info_dir("binance") == Path("/data/meta/exchange_info/binance")
     assert p.logs == Path("/data/logs")
     assert p.reports == Path("/data/reports")
@@ -26,6 +27,7 @@ def test_documented_in_arborescence() -> None:
     doc = (Path(__file__).resolve().parent.parent / "docs" / "ARBORESCENCE.md").read_text()
     for fragment in (
         "ledger.jsonl",
+        "trials.jsonl",
         "exchange_info/{source}/",
         "logs/{component}/",
         "reports/",

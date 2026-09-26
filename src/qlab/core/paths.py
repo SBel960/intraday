@@ -36,6 +36,11 @@ class DataPaths:
         """Registre des apports / retraits (``core/ledger.py``)."""
         return self.meta / "ledger.jsonl"
 
+    @property
+    def trials(self) -> Path:
+        """Registre des essais statistiques (``research/trials.py``)."""
+        return self.meta / "trials.jsonl"
+
     def exchange_info_dir(self, source: str) -> Path:
         """Snapshots versionnés d'``exchangeInfo`` (``exchange/snapshots.py``)."""
         return self.meta / "exchange_info" / _name("source", source)
