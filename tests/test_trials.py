@@ -117,3 +117,13 @@ def test_cli(config_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str
     out = capsys.readouterr().out
     assert "Volet longterm : N = 1 essai(s) distinct(s)" in out
     assert "ts_momentum" in out
+
+
+def test_find_returns_the_judged_trial(tmp_path: Path) -> None:
+    reg = TrialRegistry(tmp_path / "trials.jsonl")
+    h = _hyp(tmp_path)
+    assert reg.find("longterm", h.id, {"lookback_days": 90, "top_k": 3}) is None
+    reg.record(h, {"lookback_days": 90, "top_k": 3}, RESULT, ts_ms=T)
+    found = reg.find("longterm", h.id, {"top_k": 3.0, "lookback_days": 90.0})  # ordre, type libres
+    assert found is not None and found.ts_ms == T
+    assert reg.find("intraday", h.id, {"lookback_days": 90, "top_k": 3}) is None

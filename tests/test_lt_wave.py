@@ -50,8 +50,10 @@ def _setup(config_dir: Path) -> lt_wave.Setup:
     market = strategies.Market(
         closes, volumes, fund, {50: breadth, 100: breadth}, 365, config.longterm.signals, bases
     )
-    rules = lt_backtest.pair_rules(config, snapshot, {})
-    return lt_wave.Setup(config, snapshot, market, closes, rules, config.base.capital_tiers[1])
+    spreads = {"BTCUSDT": 0.0001}  # mesuré pour BTC seulement : les autres gardent l'hypothèse
+    rules = lt_backtest.pair_rules(config, snapshot, spreads)
+    tier = config.base.capital_tiers[1]
+    return lt_wave.Setup(config, snapshot, market, closes, rules, tier, spreads)
 
 
 def test_wave_records_every_backtested_trial_before_judging(
@@ -75,17 +77,21 @@ def test_wave_records_every_backtested_trial_before_judging(
     assert "Contrôle anti-fuite du pipeline" in body and ") : ok" in body
     assert body.count("(chauffe exclue)") + flat == len(kept)
     assert "Filtres d'ordre (pas, minimum) du snapshot actuel" in body
+    assert "spreads mesurés (médiane ≥ 24 relevés) : BTCUSDT" in body
+    assert "spread supposé 0.10% : ETHUSDT, SOLUSDT" in body
 
 
 def test_rerun_does_not_inflate_trial_count(config_dir: Path, tmp_path: Path) -> None:
-    """Relancer la vague ré-enregistre les mêmes essais : N (combinaisons distinctes) ne
-    bouge pas."""
+    """Relancer la vague : les essais déjà jugés ne sont ni regatés, ni rebacktestés, ni
+    réenregistrés ; N ne bouge pas."""
     registry = TrialRegistry(tmp_path / "trials.jsonl")
     setup = _setup(config_dir)
     lt_wave.run_wave(setup, FICHES, registry)
-    first = registry.n_trials("longterm")
-    lt_wave.run_wave(setup, FICHES, registry)
+    first, lines = registry.n_trials("longterm"), len(registry.trials("longterm"))
+    again = lt_wave.run_wave(setup, FICHES, registry)
     assert registry.n_trials("longterm") == first
+    assert len(registry.trials("longterm")) == lines  # rien de réenregistré
+    assert again.count("verdict gardé") == first and "**Verdict :" not in again
 
 
 def _write_klines(paths: DataPaths, symbol: str, closes: np.ndarray) -> None:

@@ -39,6 +39,7 @@ from qlab.core.errors import DataError
 from qlab.core.files import write_atomic
 from qlab.core.timeutils import date_str, now_ms
 from qlab.exchange.snapshots import Snapshot, SnapshotStore
+from qlab.exchange.spreads import medians as spread_medians
 from qlab.longterm import klines, lt_backtest, lt_costs, lt_report, strategies, universe
 from qlab.longterm import signals as sg
 from qlab.longterm.allocation import Policy
@@ -49,7 +50,6 @@ from qlab.research.trials import TrialRegistry, TrialResult
 BUY_HOLD = Policy("buy_hold")
 NOTES = (
     "Filtres d'ordre (pas, minimum) du snapshot actuel appliqués à tout l'historique.",
-    "Spread supposé (hypothèse prudente de la config), pas encore mesuré sur les paires EUR.",
     "Buy & hold : achat unique au départ ; une paire cotée plus tard n'y entre pas.",
 )
 
@@ -64,6 +64,7 @@ class Setup:
     opens: pl.DataFrame  # même grille que ``market.closes``
     rules: dict[str, lt_backtest.PairRules]
     tier: CapitalTier
+    spreads: dict[str, float]  # médianes mesurées (``exchange/spreads.py``), paires sûres
 
     @property
     def capital(self) -> Decimal:
@@ -126,14 +127,24 @@ Kept = tuple[Hypothesis, dict[str, float], Policy, pl.DataFrame]
 Refs = tuple[np.ndarray, int, float]  # rendements du buy & hold (grille entière), N, V[SR]
 
 
-def _gate(setup: Setup, hypotheses: Sequence[Hypothesis]) -> tuple[list[Kept], list[str]]:
-    """Gate de coûts au palier : essais retenus et une ligne de rapport par essai."""
+def _gate(
+    setup: Setup, hypotheses: Sequence[Hypothesis], registry: TrialRegistry
+) -> tuple[list[Kept], list[str]]:
+    """Gate de coûts au palier : essais retenus et une ligne de rapport par essai. Un essai
+    déjà enregistré (jugé dans une vague précédente) n'est ni regaté ni rejugé."""
     cfg, market = setup.config, setup.market
-    costs = lt_costs.tier_costs(cfg, setup.snapshot, setup.tier, {})
+    costs = lt_costs.tier_costs(cfg, setup.snapshot, setup.tier, setup.spreads)
     kept, lines = [], [f"## Gate de coûts au palier {setup.tier.name}", ""]
     for h in hypotheses:
         policy = strategies.policy_for(h)
         for params in h.grid():
+            judged = registry.find("longterm", h.id, params)
+            if judged is not None:
+                when = date_str(judged.ts_ms)
+                lines.append(
+                    f"- {strategies.trial_name(h, params)} : déjà jugé le {when}, verdict gardé"
+                )
+                continue
             weights = strategies.strategy_for(h).build(market, params)
             cost = lt_costs.simulate(weights, market.closes, policy, costs, market.days_per_year)
             verdict = lt_costs.gate(cost, h, cfg.longterm.costs)
@@ -174,13 +185,28 @@ def _judge(setup: Setup, trial: Kept, returns: np.ndarray, refs: Refs) -> str:
     except DataError as e:  # ex. jamais investi : Sharpe indéfini
         return f"## {name}\n\n**Verdict : {research_report.REJECTED}** (non évaluable : {e})\n"
     bench_metrics = lt_report.metrics(bench, ppy)
-    return lt_report.render(report, strategy_metrics, bench_metrics, dca, [window, *NOTES])
+    notes = [window, _spread_note(setup), *NOTES]
+    return lt_report.render(report, strategy_metrics, bench_metrics, dca, notes)
+
+
+def _spread_note(setup: Setup) -> str:
+    cfg = setup.config.longterm.costs
+    measured = sorted(s for s in setup.rules if s in setup.spreads)
+    assumed = sorted(s for s in setup.rules if s not in setup.spreads)
+    parts = []
+    if measured:
+        parts.append(
+            f"spreads mesurés (médiane ≥ {cfg.spread_min_samples} relevés) : {', '.join(measured)}"
+        )
+    if assumed:
+        parts.append(f"spread supposé {cfg.fallback_spread_frac:.2%} : {', '.join(assumed)}")
+    return "Coûts : " + " ; ".join(parts) + " (spreads actuels appliqués à tout l'historique)."
 
 
 def run_wave(setup: Setup, hypotheses: Sequence[Hypothesis], registry: TrialRegistry) -> str:
     """Rapport Markdown de la vague (voir l'en-tête)."""
     ppy, closes = setup.market.days_per_year, setup.market.closes
-    kept, lines = _gate(setup, hypotheses)
+    kept, lines = _gate(setup, hypotheses, registry)
     returns = []
     for h, params, policy, weights in kept:  # 1) tout enregistrer d'abord
         r = _returns(setup, weights, policy, closes)[first_decision(weights) :]
@@ -201,26 +227,12 @@ def run_wave(setup: Setup, hypotheses: Sequence[Hypothesis], registry: TrialRegi
 
 
 def _oracle_check(setup: Setup, bench: np.ndarray) -> str:
-    """Oracle : chaque jour, tout sur l'actif au meilleur rendement d'ouverture à ouverture sur
-    la période qu'il va détenir (s'il est positif). Il doit multiplier le buy & hold."""
-    opens = setup.opens.select(pl.exclude(sg.DATE)).to_numpy()
-    held = opens[2:] / opens[1:-1] - 1  # décidé en t, détenu de l'ouverture t+1 à t+2
-    best = np.nan_to_num(held, nan=-np.inf)
-    rows = np.zeros_like(opens)
-    pick = best.argmax(axis=1)
-    rows[np.arange(held.shape[0]), pick] = (best.max(axis=1) > 0).astype(float)
-    assets = [c for c in setup.opens.columns if c != sg.DATE]
-    weights = pl.DataFrame(
-        {sg.DATE: setup.opens[sg.DATE], **dict(zip(assets, rows.T, strict=True))}
-    )
+    """L'oracle (``lt_backtest.oracle_weights``) doit multiplier le buy & hold (≥ × 2)."""
     daily = Policy("calendar", period_days=1)
-    oracle = _returns(setup, weights, daily, setup.market.closes)
+    oracle = _returns(setup, lt_backtest.oracle_weights(setup.opens), daily, setup.market.closes)
     ratio = float(np.prod(1 + oracle) / np.prod(1 + bench))
-    verdict = (
-        "ok"
-        if ratio > 2
-        else "**SUSPECT : le moteur ne récompense pas la connaissance de l'avenir**"
-    )
+    suspect = "**SUSPECT : le moteur ne récompense pas la connaissance de l'avenir**"
+    verdict = "ok" if ratio > 2 else suspect
     return f"Contrôle anti-fuite du pipeline (oracle / buy & hold = {ratio:.3g}) : {verdict}"
 
 
@@ -260,8 +272,9 @@ def _action(ctx: Context) -> int:
     tier = next((t for t in config.base.capital_tiers if t.name == wanted), None)
     if tier is None:
         raise DataError(f"palier inconnu : {wanted}")
-    rules = lt_backtest.pair_rules(config, snapshot, {})
-    setup = Setup(config, snapshot, market, sg.wide(bars, "open"), rules, tier)
+    spreads = spread_medians(ctx.paths, config.longterm.costs.spread_min_samples)
+    rules = lt_backtest.pair_rules(config, snapshot, spreads)
+    setup = Setup(config, snapshot, market, sg.wide(bars, "open"), rules, tier, spreads)
     body = run_wave(setup, fiches, TrialRegistry(ctx.paths.trials))
     now = now_ms()
     path = ctx.paths.reports / f"lt_wave_{date_str(now)}.md"

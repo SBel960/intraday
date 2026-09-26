@@ -162,6 +162,11 @@ class TrialRegistry:
         """Dernière mesure de chaque essai distinct du volet."""
         return {t.key: t for t in self.trials(volet)}
 
+    def find(self, volet: str, hypothesis_id: str, params: Mapping[str, float]) -> Trial | None:
+        """Dernière mesure de cet essai (volet, fiche, combinaison), ``None`` s'il n'a jamais
+        été enregistré : un essai déjà jugé n'est pas rejugé."""
+        return self.latest(volet).get((volet, hypothesis_id, _params(params)))
+
     def n_trials(self, volet: str) -> int:
         """N du Deflated Sharpe : combinaisons distinctes essayées dans tout le volet."""
         return len(self.latest(volet))

@@ -496,6 +496,7 @@ class LtCostsConfig:
     eur_conversion_cost_frac: float
     max_drag_edge_fraction: float
     max_rejected_share: float
+    spread_min_samples: int
 
     def __post_init__(self) -> None:
         _positive("fallback_spread_frac", self.fallback_spread_frac)
@@ -503,6 +504,7 @@ class LtCostsConfig:
         _non_negative("eur_conversion_cost_frac", self.eur_conversion_cost_frac)
         _fraction("max_drag_edge_fraction", self.max_drag_edge_fraction)
         _fraction("max_rejected_share", self.max_rejected_share)
+        _positive("spread_min_samples", self.spread_min_samples)
 
 
 @dataclass(frozen=True, slots=True)

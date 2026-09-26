@@ -17,7 +17,8 @@ rapport (Binance ne publie pas l'historique des filtres).
 
 Rendements : TWR jour par jour (apports neutralisés : r_t = (V_t − F_t) / V_{t−1} − 1) ; le MWR
 se calcule sur ``flows`` et la valeur finale (``lt_report``). ``peek`` fabrique la version
-« qui voit l'avenir » d'une stratégie : elle doit faire mieux (test anti-fuite de LT.5).
+« qui voit l'avenir » d'une stratégie ; ``oracle_weights`` connaît le rendement qu'il va
+détenir : un moteur sain doit le récompenser largement (contrôle anti-fuite de LT.5).
 """
 
 from __future__ import annotations
@@ -217,3 +218,15 @@ def peek(weights: pl.DataFrame, bars: int = 1) -> pl.DataFrame:
     if bars < 1:
         raise DataError("bars ≥ 1 attendu")
     return weights.select(DATE, pl.exclude(DATE).shift(-bars).fill_null(0.0))
+
+
+def oracle_weights(opens: pl.DataFrame) -> pl.DataFrame:
+    """Contrôle du pipeline : chaque jour t, tout sur l'actif au meilleur rendement de
+    l'ouverture t+1 à l'ouverture t+2 (la période qu'il va détenir), s'il est positif. Un
+    moteur sain doit le faire exploser ; sinon il ne récompense pas l'information."""
+    prices = opens.select(pl.exclude(DATE)).to_numpy()
+    held = np.nan_to_num(prices[2:] / prices[1:-1] - 1, nan=-np.inf)
+    rows = np.zeros_like(prices)
+    rows[np.arange(held.shape[0]), held.argmax(axis=1)] = (held.max(axis=1) > 0).astype(float)
+    assets = [c for c in opens.columns if c != DATE]
+    return pl.DataFrame({DATE: opens[DATE], **dict(zip(assets, rows.T, strict=True))})

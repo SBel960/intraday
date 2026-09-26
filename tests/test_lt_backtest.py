@@ -197,3 +197,11 @@ def test_pair_rules_from_snapshot(config_dir: Path) -> None:
 def test_errors(call: object, msg: str) -> None:
     with pytest.raises(DataError, match=msg):
         call()  # type: ignore[operator]
+
+
+def test_oracle_weights_by_hand() -> None:
+    """Ouvertures A 100 → 100 → 110 → 99, B 100 → 100 → 90 → 99 : au jour 0, A (+10 %) ;
+    au jour 1, B (+10 %) ; ensuite rien de connu ⇒ cash."""
+    opens = _grid(A=[100.0, 100.0, 110.0, 99.0], B=[100.0, 100.0, 90.0, 99.0])
+    w = bt.oracle_weights(opens)
+    assert w["A"].to_list() == [1.0, 0.0, 0.0, 0.0] and w["B"].to_list() == [0.0, 1.0, 0.0, 0.0]

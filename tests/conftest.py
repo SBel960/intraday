@@ -96,6 +96,7 @@ LONGTERM: dict[str, object] = {
         "eur_conversion_cost_frac": 0.002,
         "max_drag_edge_fraction": 0.5,
         "max_rejected_share": 0.5,
+        "spread_min_samples": 24,
     },
     "acceptance": {
         "dsr_min": 0.95,

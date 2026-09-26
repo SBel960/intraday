@@ -32,6 +32,7 @@ from qlab.core.files import write_atomic
 from qlab.core.paths import DataPaths
 from qlab.core.timeutils import MS_PER_DAY, MS_PER_S, date_str, now_ms
 from qlab.exchange.snapshots import Snapshot, SnapshotStore
+from qlab.exchange.spreads import medians as spread_medians
 from qlab.longterm import funding, klines, lt_costs, market_state, universe
 from qlab.longterm import signals as sg
 from qlab.longterm.allocation import Policy
@@ -198,11 +199,18 @@ def trial_name(hypothesis: Hypothesis, params: Params) -> str:
 
 
 def cost_rows(
-    config: QlabConfig, snapshot: Snapshot, market: Market, hypotheses: Sequence[Hypothesis]
+    config: QlabConfig,
+    snapshot: Snapshot,
+    market: Market,
+    hypotheses: Sequence[Hypothesis],
+    spreads: Mapping[str, float],
 ) -> list[lt_costs.Row]:
-    """Gate LT : chaque essai (fiche × paramètres) à chaque palier de capital."""
+    """Gate LT : chaque essai (fiche × paramètres) à chaque palier de capital ; ``spreads`` :
+    médianes mesurées (``exchange/spreads.py``), les autres paires gardent l'hypothèse."""
     cfg = config.longterm.costs
-    tiers = [(t, lt_costs.tier_costs(config, snapshot, t, {})) for t in config.base.capital_tiers]
+    tiers = [
+        (t, lt_costs.tier_costs(config, snapshot, t, spreads)) for t in config.base.capital_tiers
+    ]
     rows = []
     for h in hypotheses:
         policy, strategy = policy_for(h), strategy_for(h)
@@ -231,9 +239,11 @@ def _action(ctx: Context) -> int:
     fiches = [h for h in load_all(ctx.args.hypotheses) if h.volet == "longterm"]
     ma_days = breadth_lengths(fiches)
     market = load_market(ctx.paths, config, snapshot, ma_days, ctx.args.exchange)
-    rows = cost_rows(config, snapshot, market, fiches)
+    spreads = spread_medians(ctx.paths, config.longterm.costs.spread_min_samples)
+    rows = cost_rows(config, snapshot, market, fiches, spreads)
     now = now_ms()
-    body = lt_costs.render(rows, config.longterm.costs, spread_measured=False)
+    measured = set(config.base.symbols.trade) <= set(spreads)
+    body = lt_costs.render(rows, config.longterm.costs, spread_measured=measured)
     report = ctx.paths.reports / f"lt_costs_{date_str(now)}.md"
     title = f"# Gate de coûts long terme — {date_str(now)} (snapshot {snapshot.path.name})\n\n"
     write_atomic(report, (title + body + "\n").encode("utf-8"), overwrite=True)

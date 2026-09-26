@@ -204,7 +204,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 29 | 2 · Recherche | `hypotheses/lt_*.yaml` : 7 fiches de la vague 1, écrites avant tout test (17 essais ; `lt_xs_momentum` révisée le 2026-09-26 avant tout test : top_k=3 retiré, dégénéré) | validé (figées) |
 | 29 ter | 2 · Recherche | `exchange/spreads.py` + minuteur `ops/qlab-spreads.*` (+ `core/paths.py` : `spreads`) | validé |
 | 29 bis | 2 · Recherche | `hypotheses/vague2/*.yaml` : 5 fiches (10 essais) + univers `trade_eur` dans `research/hypothesis.py` | validé (figées) |
-| 30 | 2 · Recherche | `research/trials.py` | validé |
+| 30 | 2 · Recherche | `research/trials.py` (+ `find` : un essai jugé n'est pas rejugé) | validé |
 | 31 | 2 · Recherche | `research/stats.py` | validé |
 | 32 | 2 · Recherche | `research/bootstrap.py` | validé |
 | 33 | 2 · Recherche | `research/cv.py` | validé |
@@ -218,11 +218,11 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 39 | 3 · Long terme | `longterm/signals.py` (+ vague 2 : rotation relative, cassure, choc de volume, proximité du plus haut) | validé |
 | 40 | 3 · Long terme | `longterm/allocation.py` | validé |
 | 41 | 3 · Long terme | `longterm/lt_costs.py` (règle des rejets : non réalisable au-delà de `max_rejected_share` du volume voulu) | validé |
-| 41 bis | 3 · Long terme | `longterm/strategies.py` (+ `core/config.py` : `trading_days_per_year` ; vague 2 : 4 stratégies, volumes et bases dans `Market`) | validé |
+| 41 bis | 3 · Long terme | `longterm/strategies.py` (+ `core/config.py` : `trading_days_per_year` ; vague 2 : 4 stratégies, volumes et bases dans `Market` ; spreads mesurés dans `costs`) | validé |
 | 42 | 3 · Long terme | `sizing/sizing.py` | validé |
-| 43 | 3 · Long terme | `longterm/lt_backtest.py` | validé |
+| 43 | 3 · Long terme | `longterm/lt_backtest.py` (+ `oracle_weights`) | validé |
 | 44 | 3 · Long terme | `longterm/lt_report.py` | validé |
-| 44 bis | 3 · Long terme | `longterm/lt_wave.py` (+ `signals.equal_weight`, `strategies.multi_asset` et `breadth_lengths`, config `acceptance`) | validé |
+| 44 bis | 3 · Long terme | `longterm/lt_wave.py` (+ `signals.equal_weight`, `strategies.multi_asset` et `breadth_lengths`, config `acceptance` ; spreads mesurés, essais déjà jugés gardés) | validé |
 | 45 | 4 · Paper LT | `live/risk.py` | à faire |
 | 46 | 4 · Paper LT | `live/broker.py` | à faire |
 | 47 | 4 · Paper LT | `live/paper.py` | à faire |
