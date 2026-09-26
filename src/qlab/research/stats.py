@@ -5,7 +5,8 @@ Conventions :
   écart-type, ddof = 1) sauf mention « annualisé » ;
 - kurtosis **de Pearson** (3 pour une loi normale), asymétrie standardisée : moments d'échantillon
   « population » (biais négligeable devant les centaines d'observations utilisées) ;
-- marché 24/7 : ``periods_per_year`` = 365 en journalier, 8 760 en horaire.
+- ``periods_per_year`` est fourni par le calendrier du marché (crypto 24/7 : 365 par jour ;
+  actions : environ 252 séances), jamais supposé ici.
 
 Formules (références entre parenthèses) :
 

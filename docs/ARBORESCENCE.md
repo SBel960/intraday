@@ -22,6 +22,7 @@ Chaque besoin transversal a **un seul endroit** ; un nouveau module s'y branche 
 | Format des frais | `exchange/fees.py` (`pair_fees`) | lire `snapshot.fees[...]` à la main |
 | Journal | `core/jsonlog.py` via `Context.journal` | `print` comme seule trace d'un événement important |
 | Lecture d'un YAML | `core/yamlschema.py` (`build`, `read_yaml`) | `yaml.safe_load` + validation recopiés |
+| Marché (calendrier, devise, frais, levier, règles d'ordre) | fourni par le marché (config / courtier) | « 365 », « Binance », « EUR » supposés dans le code (test anti-calendrier en dur) |
 | Valeurs métier | `config/*.yaml` via `core/config.py` | seuils, frais, symboles ou chemins en dur |
 
 Ces règles sont **vérifiées automatiquement** par `tests/test_architecture.py` (en local et en CI) : un module qui les enfreint fait échouer les tests. S'y ajoutent l'absence de cycle d'imports (typage compris) et une complexité ≤ 12 par fonction (ruff C901).
@@ -105,7 +106,7 @@ intraday/
 │   │   ├── trials.py              registre d'essais : combinaisons déclarées seulement, fiche figée (empreinte), N distinct par volet, stats pour le DSR
 │   │   ├── stats.py               moments, Sharpe annualisé, Lo 2002, Newey–West, PSR, DSR (vérifié sur l'exemple publié), MinTRL, test binomial, Sharpe minimal détectable, Benjamini-Hochberg
 │   │   ├── bootstrap.py           bootstrap stationnaire (Politis–Romano) : blocs géométriques, séries tirées aux mêmes dates, graine fixée, IC par percentiles
-│   │   ├── cv.py                  purged K-fold + embargo, walk-forward (fenêtre glissante ou expansive)
+│   │   ├── cv.py                  K plis purgés + embargo, walk-forward (expansif ou glissant), vérificateur de fuite (leaks)
 │   │   ├── ic.py                  IC Spearman par horizon et décroissance ; IC transversal (actifs comparés entre eux, date par date) moyenné avec t-stat Newey–West
 │   │   └── report.py              rapport Markdown : critères d'acceptation, verdict, comparaison buy & hold
 │   ├── sizing/
@@ -198,7 +199,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 30 | 2 · Recherche | `research/trials.py` | validé |
 | 31 | 2 · Recherche | `research/stats.py` | validé |
 | 32 | 2 · Recherche | `research/bootstrap.py` | validé |
-| 33 | 2 · Recherche | `research/cv.py` | à faire |
+| 33 | 2 · Recherche | `research/cv.py` | validé |
 | 34 | 2 · Recherche | `research/ic.py` (remonté de l'intraday ; version transversale) | à faire |
 | 35 | 2 · Recherche | `research/report.py` | à faire |
 | 36 | 3 · Long terme | `longterm/klines.py` | à faire |
@@ -303,6 +304,16 @@ Idée : réutiliser la connexion (keep-alive) pour économiser une poignée de m
 | connexion réutilisée | 687 ms |
 
 Réutiliser la connexion **ralentit** chaque requête d'environ 400 ms sur ce serveur (reproduit 4 fois, avec `urllib` et avec `http.client`). `core/http.py` garde donc une connexion par requête ; le débit s'obtient par le nombre de téléchargements simultanés (`archives.download_workers`). À retester seulement si le serveur change.
+
+## Multi-marchés et levier (décidé le 2026-09-26)
+
+**Règle multi-marchés** : le propriétaire veut trader aussi des actions et d'autres instruments. Le cœur de recherche (fiches, essais, statistiques, bootstrap, validation croisée, coûts) est déjà indépendant du marché ; les prochains modules (bougies, univers, backtest, rapports) s'écrivent de même : calendrier (périodes par an, séances, jours fériés), devise, frais (en % et minimum fixe par ordre), règles d'ordre et levier sont **fournis par le marché**, jamais supposés. Garde-fou : `test_no_hard_coded_market_calendar`.
+
+**Marchés candidats, après le long terme crypto** :
+1. actions et ETF, via un courtier avec API (ex. Interactive Brokers ; PEA ou compte-titres à trancher) — à 50 €, les minimums fixes par ordre (≈ 1-2 € = 2-4 % d'un aller-retour) les rendent impraticables ; il faut quelques milliers d'euros ou un courtier sans commission avec fractions d'action ;
+2. forex, indices, matières premières en CFD via Vantage (MetaTrader 5, Windows), **d'abord en compte démo** ; coûts à intégrer au cost gate : spread, commission, swap de chaque nuit.
+
+**Axe levier (conditionnel)** : mesuré sur BTC 2020-2026 (financement réel 11,8 %/an), le levier fait **perdre** sur un actif à 60 % de volatilité (1× : 50 € → 515 € ; 2× : 167 € ; 3× : ruine en un jour ; à 2×, 20 % des positions d'un an liquidées ; Kelly ≈ 1,1×). Il ne s'active que si : stratégie validée (DSR > 0,95, confirmée en paper trading), levier ≤ ¼ du Kelly de **cette** stratégie, swaps et financement mesurés, kill switch strict, jamais de compte sans protection contre le solde négatif. Réglementation UE (ESMA) : 30:1 devises majeures, 2:1 crypto pour un particulier.
 
 ## Hypothèses par vagues (décidé le 2026-09-26)
 

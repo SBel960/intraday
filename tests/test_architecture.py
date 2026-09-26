@@ -194,3 +194,14 @@ def test_no_import_cycles() -> None:
     for module in sorted(graph):
         if module not in state:
             visit(module, [module])
+
+
+@pytest.mark.parametrize("path", MODULES, ids=_rel)
+def test_no_hard_coded_market_calendar(path: Path) -> None:
+    """Règle multi-marchés : le nombre de périodes par an (365 crypto, 252 actions, 8 760
+    heures…) vient du calendrier du marché, jamais d'une constante dans le code."""
+    for node in ast.walk(_tree(path)):
+        if isinstance(node, ast.Constant) and type(node.value) is int:
+            assert node.value not in {252, 365, 366, 8760, 8766}, (
+                f"{_rel(path)}:{node.lineno} : {node.value} en dur (calendrier du marché)"
+            )
