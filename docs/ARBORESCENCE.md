@@ -73,6 +73,7 @@ intraday/
 │   ├── exchange/
 │   │   ├── exchange_info.py       récupère exchangeInfo, mesure l'horloge (/api/v3/time), alerte si une paire tradée change ; commande fetch [--if-due] / show
 │   │   ├── account.py             compte Binance en lecture seule : signature Ed25519 à l'heure serveur, refus de toute clé non lecture seule, frais réels
+│   │   ├── spreads.py             relevés horaires des spreads réels (bookTicker) des paires EUR et tradées ; médiane par paire pour le gate de coûts
 │   │   ├── fees.py                SEUL format des frais dans un snapshot : repli config + frais réels par paire (by_symbol)
 │   │   ├── snapshots.py           snapshots versionnés (zstd, hash, écriture atomique), point-in-time, différences entre versions
 │   │   ├── effective_params.py    recalcul à chaque appel : palier (capital apporté), frais du snapshot en vigueur, limites en devise et δ_min (valeur du portefeuille), alertes
@@ -159,6 +160,7 @@ $DATA_ROOT/
 │   ├── cursors/                                                       curseurs de reprise
 │   ├── ledger.jsonl                                                   registre des apports / retraits (append-only)
 │   ├── gaps.parquet                                                   table des trous
+│   ├── spreads.jsonl                                                  relevés horaires des spreads (bookTicker) des paires cotées dans la devise du compte
 │   └── trials.jsonl                                                   registre d'essais (N)
 ├── logs/{component}/YYYY-MM-DD.jsonl                                 journaux JSONL append-only (jsonlog.py)
 └── reports/                                                           rapports générés
@@ -199,14 +201,15 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 27 | 1 · Gate | `costs/gate_run.py` | validé |
 | — | 1 · Gate | **Cost gate v1 sur données réelles** : book_ticker Tardis (1er de chaque mois) des paires tradées, frais réels du compte (le §5 n'utilise pas les aggTrades) | **fait le 2026-09-26 : aucun horizon ≤ 15 min ne passe** (BTCEUR, ETHEUR, SOLEUR) |
 | 28 | 2 · Recherche | `research/hypothesis.py` (+ `hypotheses/_template.yaml`) | validé |
-| 29 bis | 2 · Recherche | `hypotheses/vague2/*.yaml` : 5 fiches (10 essais) + univers `trade_eur` dans `research/hypothesis.py` | validé (figées) |
 | 29 | 2 · Recherche | `hypotheses/lt_*.yaml` : 7 fiches de la vague 1, écrites avant tout test (17 essais ; `lt_xs_momentum` révisée le 2026-09-26 avant tout test : top_k=3 retiré, dégénéré) | validé (figées) |
+| 29 ter | 2 · Recherche | `exchange/spreads.py` + minuteur `ops/qlab-spreads.*` (+ `core/paths.py` : `spreads`) | validé |
+| 29 bis | 2 · Recherche | `hypotheses/vague2/*.yaml` : 5 fiches (10 essais) + univers `trade_eur` dans `research/hypothesis.py` | validé (figées) |
 | 30 | 2 · Recherche | `research/trials.py` | validé |
 | 31 | 2 · Recherche | `research/stats.py` | validé |
 | 32 | 2 · Recherche | `research/bootstrap.py` | validé |
 | 33 | 2 · Recherche | `research/cv.py` | validé |
 | 34 | 2 · Recherche | `research/ic.py` (remonté de l'intraday ; version transversale) | validé |
-| 35 | 2 · Recherche | `research/report.py` | validé |
+| 35 | 2 · Recherche | `research/report.py` (règle de stabilité alignée sur la spec LT.6 : ≥ 3 sous-périodes battues dont 1 baissière) | validé |
 | 36 | 3 · Long terme | `longterm/klines.py` + `longterm/klines_build.py` (+ `core/paths.py` : `lt_klines`) | validé |
 | 37 | 3 · Long terme | `longterm/universe.py` (+ `core/config.py` : `universe.*`, `core/paths.py` : `lt_klines_dir`) | validé |
 | 38 | 3 · Long terme | `longterm/market_state.py` | validé |

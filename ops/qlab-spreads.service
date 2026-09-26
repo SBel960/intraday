@@ -1,0 +1,11 @@
+# Relevé des spreads réels (bookTicker) des paires EUR : sert au gate de coûts.
+# Lancé par qlab-spreads.timer ; installation : voir ops/README.md.
+[Unit]
+Description=qlab : relevé des spreads (bookTicker)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/intraday
+ExecStart=%h/.venvs/qlab/bin/python -m qlab.exchange.spreads --config config sample

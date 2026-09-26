@@ -16,6 +16,8 @@ from qlab.research.report import (
     Check,
     Criteria,
     Evidence,
+    SubResult,
+    _stability,
     _verdict,
     evaluate,
     render,
@@ -104,7 +106,26 @@ def test_missing_bear_market_fails_stability() -> None:
     ev = _evidence(0.0015)
     bull_only = _evidence(0.0015, benchmark=np.abs(ev.benchmark))
     stab = evaluate(bull_only, CRIT).checks[2]
-    assert stab.passed is False and "dont 0 baissière" in stab.detail
+    assert stab.passed is False and "dont 0/0 baissière" in stab.detail
+
+
+def _sub(label: str, beats: bool, bear: bool) -> SubResult:
+    return SubResult(label, 365, 1.0 if beats else 0.0, 0.5, bear)
+
+
+@pytest.mark.parametrize(
+    ("pattern", "expected"),
+    [
+        ("B+ b- B+ b+ B- B- B-", True),  # 3 battues dont 1 baissière (b = baissière)
+        ("B+ B+ B+ b- b-", False),  # 3 battues, aucune baissière battue
+        ("B+ b+ B- B- B-", False),  # 2 battues seulement
+        ("B+ B+ B+ B+", False),  # aucune baissière du tout
+    ],
+)
+def test_stability_rule_by_hand(pattern: str, expected: bool) -> None:
+    """Au moins 3 sous-périodes battues, dont au moins une baissière (spec LT.6)."""
+    subs = tuple(_sub(str(i), p[1] == "+", p[0] == "b") for i, p in enumerate(pattern.split()))
+    assert _stability(subs, CRIT).passed is expected
 
 
 def _checks(dsr: bool, robust: bool, history: bool, paper: bool | None) -> tuple[Check, ...]:

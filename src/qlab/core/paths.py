@@ -49,6 +49,11 @@ class DataPaths:
         """Registre des essais statistiques (``research/trials.py``)."""
         return self.meta / "trials.jsonl"
 
+    @property
+    def spreads(self) -> Path:
+        """Relevés de spreads (meilleur prix acheteur / vendeur) : ``exchange/spreads.py``."""
+        return self.meta / "spreads.jsonl"
+
     def exchange_info_dir(self, source: str) -> Path:
         """Snapshots versionnés d'``exchangeInfo`` (``exchange/snapshots.py``)."""
         return self.meta / "exchange_info" / _name("source", source)

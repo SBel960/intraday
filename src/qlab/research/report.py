@@ -10,9 +10,11 @@ Critères, tous requis :
 
 1. DSR > ``dsr_min`` (N essais du volet) ;
 2. écart de Sharpe stratégie − buy & hold : IC bootstrap stationnaire strictement > 0 ;
-3. stabilité : écart de Sharpe > 0 dans **chaque** sous-période, au moins ``min_subperiods``
-   sous-périodes, dont un marché baissier si ``require_bear`` (baissier = buy & hold composé
-   négatif sur la sous-période) ;
+3. stabilité (texte de la spec LT.6) : écart de Sharpe > 0 dans **au moins**
+   ``min_subperiods`` sous-périodes, dont au moins un marché baissier si ``require_bear``
+   (baissier = buy & hold composé négatif sur la sous-période). Règle alignée sur la spec le
+   2026-09-26, avant la vague 2 ; la vague 1 exigeait toutes les sous-périodes (aucun de ses
+   verdicts n'en dépend : l'IC de l'écart de Sharpe les rejetait déjà) ;
 4. écart de Sharpe > 0 sur au moins ``min_assets`` actifs ;
 5. historique ≥ MinTRL (contre SR*, le meilleur Sharpe attendu par hasard) ;
 6. paper trading dans l'intervalle du backtest — évalué ailleurs, transmis ici (``None`` :
@@ -151,13 +153,16 @@ def _validate(ev: Evidence, cr: Criteria) -> None:
 def _stability(subs: tuple[SubResult, ...], cr: Criteria) -> Check:
     beaten = sum(s.beats for s in subs)
     bears = sum(s.bear for s in subs)
-    ok = beaten == len(subs) >= cr.min_subperiods and (bears > 0 or not cr.require_bear)
-    bear_txt = f", dont {bears} baissière(s)" if cr.require_bear else ""
+    bears_beaten = sum(s.beats and s.bear for s in subs)
+    ok = beaten >= cr.min_subperiods and (bears_beaten > 0 or not cr.require_bear)
+    bear_txt = (
+        f", dont {bears_beaten}/{bears} baissière(s) (au moins 1 exigée)" if cr.require_bear else ""
+    )
     return Check(
         "stabilité par sous-période",
         ok,
         f"bat le buy & hold dans {beaten}/{len(subs)} sous-périodes "
-        f"(minimum {cr.min_subperiods}{bear_txt})",
+        f"(minimum {cr.min_subperiods}){bear_txt}",
     )
 
 

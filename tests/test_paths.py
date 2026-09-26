@@ -14,6 +14,7 @@ def test_tree_matches_documentation() -> None:
     assert p.meta == Path("/data/meta")
     assert p.ledger == Path("/data/meta/ledger.jsonl")
     assert p.trials == Path("/data/meta/trials.jsonl")
+    assert p.spreads == Path("/data/meta/spreads.jsonl")
     assert p.exchange_info_dir("binance") == Path("/data/meta/exchange_info/binance")
     assert p.logs == Path("/data/logs")
     assert p.reports == Path("/data/reports")
@@ -32,6 +33,7 @@ def test_documented_in_arborescence() -> None:
     for fragment in (
         "ledger.jsonl",
         "trials.jsonl",
+        "spreads.jsonl",
         "exchange_info/{source}/",
         "logs/{component}/",
         "reports/",

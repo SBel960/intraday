@@ -1,0 +1,11 @@
+# Un relevé par heure (les spreads varient avec l'heure de la journée) ; rattrapé au démarrage.
+[Unit]
+Description=qlab : relevé horaire des spreads
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=600
+Persistent=true
+
+[Install]
+WantedBy=timers.target
