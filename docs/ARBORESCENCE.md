@@ -135,7 +135,8 @@ intraday/
 │       ├── strategies.py          table fiche → signal, données (Market), rééquilibrage ; commande du gate LT officiel (rapport reports/lt_costs_*.md)
 │       ├── lt_costs.py            GATE LT : rejeu des poids sans performance → turnover, drag, rejets minNotional, coûts/edge de la fiche, par palier
 │       ├── lt_backtest.py         barre à barre en Decimal : décision clôture t, exécution ouverture t+1 (impact, frais réels, lot.py), δ_min réel, apports, TWR ; peek = tricheur du test anti-fuite
-│       └── lt_report.py           CAGR, vol, MaxDD, Calmar, Sortino, PSR / DSR / MinTRL, vs buy & hold et DCA
+│       ├── lt_report.py           mesures d'un essai (CAGR, vol, Sharpe, MaxDD et durée, Calmar, Sortino, MWR), DCA, moments pour le registre, rendu vs buy & hold et DCA
+│       └── lt_wave.py             verdict d'une vague : essais qui passent le gate LT → backtest, enregistrement de l'essai, références, critères, rapport
 └── tests/
     ├── conftest.py                uniquement la fixture de config temporaire (tmp_path) ; les données de test sont dans chaque test
     └── test_<nom>.py              un fichier de test par module source (données construites à la main, valeurs attendues écrites)
@@ -215,7 +216,8 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 41 bis | 3 · Long terme | `longterm/strategies.py` (+ `core/config.py` : `trading_days_per_year`) | validé |
 | 42 | 3 · Long terme | `sizing/sizing.py` | validé |
 | 43 | 3 · Long terme | `longterm/lt_backtest.py` | validé |
-| 44 | 3 · Long terme | `longterm/lt_report.py` | à faire |
+| 44 | 3 · Long terme | `longterm/lt_report.py` | validé |
+| 44 bis | 3 · Long terme | `longterm/lt_wave.py` (+ `signals.equal_weight` public pour la référence) | à faire |
 | 45 | 4 · Paper LT | `live/risk.py` | à faire |
 | 46 | 4 · Paper LT | `live/broker.py` | à faire |
 | 47 | 4 · Paper LT | `live/paper.py` | à faire |
