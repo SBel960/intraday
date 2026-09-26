@@ -130,7 +130,7 @@ intraday/
 │       ├── universe.py            univers point-in-time : tradé (chauffe) et observé (1 paire en dollar par actif, stablecoins et tokens à levier exclus, volume médian 30 j ≥ 1 M$)
 │       ├── funding.py             taux de financement USDⓈ-M → lt/futures/funding/{contrat}.parquet (heure exacte, intervalle lu par ligne), somme par jour
 │       ├── market_state.py        vue globale sur l'univers observé : largeur (part des actifs au-dessus de leur moyenne L j), dispersion, part de BTC dans les volumes (corrélations : quand une fiche en aura besoin)
-│       ├── signals.py             momentum série temporelle, moyennes mobiles, momentum transversal, inverse vol
+│       ├── signals.py             signaux des 7 fiches → poids cibles (grille journalière complète, décidés à la clôture de t, long seulement, somme ≤ 1)
 │       ├── allocation.py          poids cibles → ordres : buy & hold, DCA, rééquilibrage calendaire / bandes, δ_min
 │       ├── lt_costs.py            GATE LT : turnover, drag, rejets minNotional par palier de capital
 │       ├── lt_backtest.py         barre à barre (décision clôture t, exécution ouverture t+1), apports, TWR / MWR
@@ -208,7 +208,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 37 | 3 · Long terme | `longterm/universe.py` (+ `core/config.py` : `universe.*`, `core/paths.py` : `lt_klines_dir`) | validé |
 | 38 | 3 · Long terme | `longterm/market_state.py` | validé |
 | 38 bis | 3 · Long terme | `longterm/funding.py` (+ `core/paths.py` : `lt_futures`) | validé |
-| 39 | 3 · Long terme | `longterm/signals.py` | à faire |
+| 39 | 3 · Long terme | `longterm/signals.py` | validé |
 | 40 | 3 · Long terme | `longterm/allocation.py` | à faire |
 | 41 | 3 · Long terme | `longterm/lt_costs.py` | à faire |
 | 42 | 3 · Long terme | `sizing/sizing.py` | à faire |
