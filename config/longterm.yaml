@@ -11,6 +11,7 @@ universe:
   leveraged_suffixes: [UP, DOWN, BULL, BEAR]   # BTCUP = BTC + UP ; JUP, SYRUP gardés (J, SYR : pas des bases)
   volume_lookback_days: 30
   min_volume_quote: 1000000          # volume médian quotidien ≥ 1 M$ (décidé le 2026-09-26, avant tout test)
+  quote_min_volume: 100000          # univers trade_eur : paires EUR ≥ 100 k€/jour (médiane 30 j), décidé le 2026-09-26
 
 signals:
   momentum_lookbacks_days: [30, 60, 90, 180, 365]

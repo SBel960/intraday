@@ -24,6 +24,7 @@ CFG = UniverseConfig(
     leveraged_suffixes=("UP", "DOWN"),
     volume_lookback_days=3,
     min_volume_quote=3.0,
+    quote_min_volume=20.0,
 )
 KNOWN = {
     s: {"baseAsset": b, "quoteAsset": q}
@@ -37,6 +38,9 @@ KNOWN = {
         ("JUPUSDT", "JUP", "USDT"),
         ("USDCUSDT", "USDC", "USDT"),
         ("DEADUSDT", "DEAD", "USDT"),
+        ("BTCEUR", "BTC", "EUR"),
+        ("SHIBEUR", "SHIB", "EUR"),
+        ("USDCEUR", "USDC", "EUR"),
     ]
 }
 
@@ -164,3 +168,17 @@ def test_cli(config_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert "2024 : actifs par jour min 3, médiane 3, max 3" in out
     assert "Tradé BTCUSDT : éligible dès le 2024-01-31" in out
     assert "2024-02-05 : 3 actifs : BTCUSDT ETHUSDT SOLUSDT" in out
+
+
+def test_quoted_universe_uses_its_own_volume_threshold(tmp_path: Path) -> None:
+    """Paires EUR : BTCEUR à 30 €/jour (≥ 20) éligible dès la fin de la chauffe ; SHIBEUR à
+    10 €/jour (< 20) jamais ; USDCEUR : stablecoin exclu ; paires USDT ignorées."""
+    paths = DataPaths(tmp_path)
+    _market(paths)
+    _write(paths, "BTCEUR", _bars(list(range(6)), [30.0] * 6))
+    _write(paths, "SHIBEUR", _bars(list(range(6)), [10.0] * 6))
+    _write(paths, "USDCEUR", _bars(list(range(6)), [99.0] * 6))
+    eur = un.quoted(paths, KNOWN, CFG, "EUR")
+    assert eur.candidates == 2  # BTCEUR, SHIBEUR (USDCEUR exclu)
+    assert set(eur.members["symbol"]) == {"BTCEUR"}
+    assert _days(eur.members["date_ms"]) == [2, 3, 4, 5]

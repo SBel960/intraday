@@ -16,6 +16,10 @@ survivant), et son historique reste.
   des ``volume_lookback_days`` derniers jours (bougie du jour comprise, jamais après)
   ≥ ``min_volume_quote``.
 
+- **Univers tradé élargi** (fiches ``trade_eur``, ``quoted``) : paires cotées dans la devise
+  du compte, mêmes exclusions et même chauffe, volume médian ≥ ``quote_min_volume`` (dans
+  cette devise).
+
 Base et devise d'une paire viennent du dernier snapshot exchangeInfo (elles ne changent jamais,
 aucune fuite d'information) ; une paire absente du snapshot est reconnue par le suffixe de sa
 devise, sinon ignorée et comptée.
@@ -116,18 +120,13 @@ class Observed:
     unknown: int
 
 
-def observed(
-    paths: DataPaths, known: Mapping[str, Mapping[str, Any]], cfg: UniverseConfig
-) -> Observed:
-    symbols = [p.stem for p in sorted(paths.lt_klines_dir(INTERVAL).glob("*.parquet"))]
-    pairs = [pair_of(s, known, cfg.reference_quotes) for s in symbols]
-    bases = {p.base for p in pairs if p is not None}
-    chosen = [
-        p for p in pairs if p and p.quote in cfg.reference_quotes and is_asset(p.base, bases, cfg)
-    ]
-    priority = {q: i for i, q in enumerate(cfg.reference_quotes)}
+def _members(
+    paths: DataPaths, chosen: Sequence[Pair], cfg: UniverseConfig, min_volume: float
+) -> pl.DataFrame:
+    """Une paire par actif et par jour : la plus prioritaire (ordre de ``chosen``) parmi celles
+    qui sont éligibles ce jour-là (chauffe, volume médian ≥ ``min_volume``)."""
     frames = []
-    for p in chosen:
+    for rank, p in enumerate(chosen):
         bars = pl.read_parquet(
             paths.lt_klines(INTERVAL, p.symbol), columns=["open_time_ms", "volume_quote"]
         )
@@ -135,21 +134,51 @@ def observed(
             bars,
             warmup_days=cfg.warmup_days,
             lookback_days=cfg.volume_lookback_days,
-            min_volume=cfg.min_volume_quote,
+            min_volume=min_volume,
         )
         frames.append(
             pl.DataFrame({"date_ms": dates}).with_columns(
-                base=pl.lit(p.base), symbol=pl.lit(p.symbol), prio=pl.lit(priority[p.quote])
+                base=pl.lit(p.base), symbol=pl.lit(p.symbol), prio=pl.lit(rank)
             )
         )
     schema = {"date_ms": pl.Int64, "base": pl.String, "symbol": pl.String, "prio": pl.Int64}
     everything = pl.concat(frames) if frames else pl.DataFrame(schema=schema)
-    members = (
+    return (
         everything.sort("date_ms", "base", "prio")
         .unique(subset=["date_ms", "base"], keep="first", maintain_order=True)
         .drop("prio")
     )
-    return Observed(members, len(chosen), sum(p is None for p in pairs))
+
+
+def _candidates(
+    paths: DataPaths,
+    known: Mapping[str, Mapping[str, Any]],
+    cfg: UniverseConfig,
+    quotes: Sequence[str],
+) -> tuple[list[Pair], int]:
+    """Paires cotées dans ``quotes`` (par priorité) dont la base est un actif ; paires ignorées."""
+    symbols = [p.stem for p in sorted(paths.lt_klines_dir(INTERVAL).glob("*.parquet"))]
+    pairs = [pair_of(s, known, quotes) for s in symbols]
+    bases = {p.base for p in pairs if p is not None}
+    kept = [p for p in pairs if p and p.quote in quotes and is_asset(p.base, bases, cfg)]
+    kept.sort(key=lambda p: quotes.index(p.quote))
+    return kept, sum(p is None for p in pairs)
+
+
+def observed(
+    paths: DataPaths, known: Mapping[str, Mapping[str, Any]], cfg: UniverseConfig
+) -> Observed:
+    chosen, unknown = _candidates(paths, known, cfg, cfg.reference_quotes)
+    return Observed(_members(paths, chosen, cfg, cfg.min_volume_quote), len(chosen), unknown)
+
+
+def quoted(
+    paths: DataPaths, known: Mapping[str, Mapping[str, Any]], cfg: UniverseConfig, quote: str
+) -> Observed:
+    """Univers tradé élargi (fiches ``trade_eur``) : paires cotées dans la devise du compte,
+    mêmes exclusions et chauffe, volume médian ≥ ``quote_min_volume`` (en ``quote``)."""
+    chosen, unknown = _candidates(paths, known, cfg, (quote,))
+    return Observed(_members(paths, chosen, cfg, cfg.quote_min_volume), len(chosen), unknown)
 
 
 def _add_arguments(parser: argparse.ArgumentParser) -> None:

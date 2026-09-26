@@ -301,6 +301,7 @@ def test_intraday_domain(config_dir: Path, keys: list[str | int], value: Any, ms
         (["universe", "excluded_bases"], ["EUR", "EUR"], "excluded_bases"),
         (["universe", "volume_lookback_days"], 0, "volume_lookback_days"),
         (["universe", "min_volume_quote"], 0, "min_volume_quote"),
+        (["universe", "quote_min_volume"], 0, "quote_min_volume"),
     ],
 )
 def test_longterm_domain(config_dir: Path, keys: list[str | int], value: Any, msg: str) -> None:

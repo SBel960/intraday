@@ -77,6 +77,7 @@ LONGTERM: dict[str, object] = {
         "leveraged_suffixes": ["UP", "DOWN"],
         "volume_lookback_days": 30,
         "min_volume_quote": 1_000_000.0,
+        "quote_min_volume": 100_000.0,
     },
     "signals": {
         "momentum_lookbacks_days": [30, 90],

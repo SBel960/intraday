@@ -212,6 +212,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 35 | 2 · Recherche | `research/report.py` (règle de stabilité alignée sur la spec LT.6 : ≥ 3 sous-périodes battues dont 1 baissière) | validé |
 | 36 | 3 · Long terme | `longterm/klines.py` + `longterm/klines_build.py` (+ `core/paths.py` : `lt_klines`) | validé |
 | 37 | 3 · Long terme | `longterm/universe.py` (+ `core/config.py` : `universe.*`, `core/paths.py` : `lt_klines_dir`) | validé |
+| 37 bis | 3 · Long terme | `longterm/universe.py` : univers `trade_eur` (`quoted`, paires EUR ≥ 100 k€/jour) + config `quote_min_volume` | validé |
 | 38 | 3 · Long terme | `longterm/market_state.py` | validé |
 | 38 bis | 3 · Long terme | `longterm/funding.py` (+ `core/paths.py` : `lt_futures`) | validé |
 | 39 | 3 · Long terme | `longterm/signals.py` | validé |
