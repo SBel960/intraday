@@ -108,7 +108,7 @@ intraday/
 │   │   ├── bootstrap.py           bootstrap stationnaire (Politis–Romano) : blocs géométriques, séries tirées aux mêmes dates, graine fixée, IC par percentiles
 │   │   ├── cv.py                  K plis purgés + embargo, walk-forward (expansif ou glissant), vérificateur de fuite (leaks)
 │   │   ├── ic.py                  IC Spearman par horizon et décroissance ; IC transversal (actifs comparés entre eux, date par date) moyenné avec t-stat Newey–West
-│   │   └── report.py              rapport Markdown : critères d'acceptation, verdict, comparaison buy & hold
+│   │   └── report.py              critères d'acceptation (DSR, écart de Sharpe bootstrap, sous-périodes dont baissière, actifs, MinTRL, paper) → verdict + Markdown
 │   ├── sizing/
 │   │   └── sizing.py              vol targeting, Kelly (information, plafonné à 0,25 f*), limites de risque
 │   ├── backtest/
@@ -201,7 +201,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 32 | 2 · Recherche | `research/bootstrap.py` | validé |
 | 33 | 2 · Recherche | `research/cv.py` | validé |
 | 34 | 2 · Recherche | `research/ic.py` (remonté de l'intraday ; version transversale) | validé |
-| 35 | 2 · Recherche | `research/report.py` | à faire |
+| 35 | 2 · Recherche | `research/report.py` | validé |
 | 36 | 3 · Long terme | `longterm/klines.py` | à faire |
 | 37 | 3 · Long terme | `longterm/universe.py` | à faire |
 | 38 | 3 · Long terme | `longterm/market_state.py` | à faire |
