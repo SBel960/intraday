@@ -17,7 +17,7 @@ import pytest
 
 from qlab.core.config import load_config
 from qlab.core.errors import DataError
-from qlab.costs.cost_gate import ALL_SLOTS, GateParams, run_gate
+from qlab.costs.cost_gate import ALL_SLOTS, GateParams, run_gate, sample_segment, summarize
 
 T = 1_704_067_200_000  # 2024-01-01T00:00:00Z : tranche horaire 0
 HOUR = 3_600_000
@@ -139,3 +139,22 @@ def test_params_from_config(config_dir: Path) -> None:
 def test_errors(quotes: pl.DataFrame, msg: str) -> None:
     with pytest.raises(DataError, match=msg):
         run_gate(quotes, PARAMS)
+
+
+def test_segments_pool_samples_not_medians() -> None:
+    """Deux journées séparées de 30 jours : pas de grille entre elles, médianes sur l'ensemble.
+    Jour 1 : ×1,001/s (5 ln 1,001) ; jour 2 : ×1,003/s (5 ln 1,003) ; 26 échantillons chacun à
+    5 s ⇒ médiane des 52 = moyenne des deux valeurs centrales."""
+    day = 86_400_000
+    seg1 = sample_segment(_quotes(T, 30, 1.001), PARAMS)
+    seg2 = sample_segment(_quotes(T + 30 * day, 30, 1.003), PARAMS)
+    r = summarize([seg1, seg2], PARAMS)
+    h5 = _row(r.table, ALL_SLOTS, 5)
+    assert h5["n"] == 52  # aucune grille entre les deux journées
+    assert h5["move_median"] == pytest.approx((5 * math.log(1.001) + 5 * math.log(1.003)) / 2)
+    assert (r.quotes_used, r.quotes_excluded) == (62, 0)
+
+
+def test_summarize_nothing() -> None:
+    with pytest.raises(DataError, match="pas assez de données"):
+        summarize([], PARAMS)

@@ -160,12 +160,27 @@ def _aggregate(samples: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-def run_gate(quotes: pl.DataFrame, params: GateParams) -> GateResult:
-    """Exécute le gate sur les cotations d'une paire (fonction pure, déterministe)."""
+@dataclass(frozen=True, slots=True)
+class Segment:
+    """Échantillons d'une série continue de cotations (ex. une journée Tardis)."""
+
+    samples: pl.DataFrame
+    quotes_used: int
+    quotes_excluded: int
+
+
+def sample_segment(quotes: pl.DataFrame, params: GateParams) -> Segment:
+    """Échantillonne une série **continue** de cotations (grille de son début à sa fin)."""
     clean, excluded = _clean_quotes(quotes, params)
     if clean.height == 0:
         raise DataError(f"cotations : aucune valide ({excluded} exclues)")
-    samples = _samples(clean, params)
+    return Segment(_samples(clean, params), clean.height, excluded)
+
+
+def summarize(segments: list[Segment], params: GateParams) -> GateResult:
+    """Résultat du gate sur plusieurs séries (ex. le 1er de chaque mois) : médianes calculées
+    sur l'ensemble des échantillons, jamais moyennes de médianes."""
+    samples = pl.concat([s.samples for s in segments]) if segments else pl.DataFrame()
     if samples.height == 0:
         raise DataError("pas assez de données pour le plus petit horizon (ou uniquement des trous)")
     table = _aggregate(samples)
@@ -173,4 +188,11 @@ def run_gate(quotes: pl.DataFrame, params: GateParams) -> GateResult:
     min_h: dict[int, int | None] = dict.fromkeys(table["slot"].unique().to_list())
     for slot, horizon in passing.group_by("slot").agg(pl.col("horizon_s").min()).iter_rows():
         min_h[slot] = horizon
-    return GateResult(table, min_h, clean.height, excluded, params.min_ratio)
+    used = sum(s.quotes_used for s in segments)
+    excluded = sum(s.quotes_excluded for s in segments)
+    return GateResult(table, min_h, used, excluded, params.min_ratio)
+
+
+def run_gate(quotes: pl.DataFrame, params: GateParams) -> GateResult:
+    """Exécute le gate sur une série continue de cotations (fonction pure, déterministe)."""
+    return summarize([sample_segment(quotes, params)], params)

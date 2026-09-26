@@ -74,7 +74,8 @@ intraday/
 │   │   └── lot.py                 arrondi prix → tickSize, quantité → stepSize (Decimal), rejet sous minNotional
 │   ├── costs/
 │   │   ├── cost_model.py          formules pures vectorisées (fractions float64) : s̃, c_taker, c_maker, coût d'un ordre, p*, drag, coût de rééquilibrage (§5, LT.4)
-│   │   └── cost_gate.py           LE GATE : distribution de c, mouvement médian par horizon, ratio, horizon min > 3
+│   │   ├── cost_gate.py           LE GATE : distribution de c, mouvement médian par horizon, ratio, horizon min > 3
+│   │   └── gate_run.py            cost gate v1 sur données réelles : journées Tardis × frais réels du snapshot, rapport Markdown dans reports/
 │   ├── data/
 │   │   ├── cursor.py              curseur persistant et atomique (reprise après crash, ni trou ni doublon)
 │   │   ├── raw_writer.py          RAW JSONL.zst append-only, écriture par lots, rotation horaire
@@ -184,27 +185,28 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 22 | 1 · Gate | `costs/cost_model.py` | validé |
 | 23 | 1 · Gate | `costs/cost_gate.py` | validé |
 | 24 | 1 · Gate | `data/tardis.py` | validé |
-| — | 1 · Gate | **Cost gate v1 sur données réelles** : book_ticker Tardis (1er de chaque mois) des paires tradées, frais réels du compte (le §5 n'utilise pas les aggTrades) | à faire |
-| 25 | 2 · Recherche | `research/hypothesis.py` (+ `hypotheses/_template.yaml`) | à faire |
-| 26 | 2 · Recherche | `hypotheses/lt_*.yaml` : 6 fiches initiales, écrites avant tout test | à faire |
-| 27 | 2 · Recherche | `research/trials.py` | à faire |
-| 28 | 2 · Recherche | `research/stats.py` | à faire |
-| 29 | 2 · Recherche | `research/bootstrap.py` | à faire |
-| 30 | 2 · Recherche | `research/cv.py` | à faire |
-| 31 | 2 · Recherche | `research/ic.py` (remonté de l'intraday ; version transversale) | à faire |
-| 32 | 2 · Recherche | `research/report.py` | à faire |
-| 33 | 3 · Long terme | `longterm/klines.py` | à faire |
-| 34 | 3 · Long terme | `longterm/universe.py` | à faire |
-| 35 | 3 · Long terme | `longterm/market_state.py` | à faire |
-| 36 | 3 · Long terme | `longterm/signals.py` | à faire |
-| 37 | 3 · Long terme | `longterm/allocation.py` | à faire |
-| 38 | 3 · Long terme | `longterm/lt_costs.py` | à faire |
-| 39 | 3 · Long terme | `sizing/sizing.py` | à faire |
-| 40 | 3 · Long terme | `longterm/lt_backtest.py` | à faire |
-| 41 | 3 · Long terme | `longterm/lt_report.py` | à faire |
-| 42 | 4 · Paper LT | `live/risk.py` | à faire |
-| 43 | 4 · Paper LT | `live/broker.py` | à faire |
-| 44 | 4 · Paper LT | `live/paper.py` | à faire |
+| 25 | 1 · Gate | `costs/gate_run.py` | validé |
+| — | 1 · Gate | **Cost gate v1 sur données réelles** : book_ticker Tardis (1er de chaque mois) des paires tradées, frais réels du compte (le §5 n'utilise pas les aggTrades) | **fait le 2026-09-26 : aucun horizon ≤ 15 min ne passe** (BTCEUR, ETHEUR, SOLEUR) |
+| 26 | 2 · Recherche | `research/hypothesis.py` (+ `hypotheses/_template.yaml`) | à faire |
+| 27 | 2 · Recherche | `hypotheses/lt_*.yaml` : 6 fiches initiales, écrites avant tout test | à faire |
+| 28 | 2 · Recherche | `research/trials.py` | à faire |
+| 29 | 2 · Recherche | `research/stats.py` | à faire |
+| 30 | 2 · Recherche | `research/bootstrap.py` | à faire |
+| 31 | 2 · Recherche | `research/cv.py` | à faire |
+| 32 | 2 · Recherche | `research/ic.py` (remonté de l'intraday ; version transversale) | à faire |
+| 33 | 2 · Recherche | `research/report.py` | à faire |
+| 34 | 3 · Long terme | `longterm/klines.py` | à faire |
+| 35 | 3 · Long terme | `longterm/universe.py` | à faire |
+| 36 | 3 · Long terme | `longterm/market_state.py` | à faire |
+| 37 | 3 · Long terme | `longterm/signals.py` | à faire |
+| 38 | 3 · Long terme | `longterm/allocation.py` | à faire |
+| 39 | 3 · Long terme | `longterm/lt_costs.py` | à faire |
+| 40 | 3 · Long terme | `sizing/sizing.py` | à faire |
+| 41 | 3 · Long terme | `longterm/lt_backtest.py` | à faire |
+| 42 | 3 · Long terme | `longterm/lt_report.py` | à faire |
+| 43 | 4 · Paper LT | `live/risk.py` | à faire |
+| 44 | 4 · Paper LT | `live/broker.py` | à faire |
+| 45 | 4 · Paper LT | `live/paper.py` | à faire |
 
 **Phase 9 — Événements (informations hors marché), après le paper LT.** Décidée le 2026-09-25 : le projet ne regarde aujourd'hui que des chiffres de marché ; un tweet, une annonce de la Fed ou un piratage n'entrent dans aucun calcul, et le kill switch ne voit que leurs conséquences sur les prix. Usage prévu d'abord pour le **risque** (ne pas être exposé au mauvais moment), et seulement ensuite, éventuellement, comme signal (fiche d'hypothèse, essai compté dans le DSR, cost gate). Règles à respecter :
 
@@ -215,34 +217,34 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 
 | # | Phase | Fichier | Statut |
 |---|---|---|---|
-| 45 | 9 · Événements | `docs/SPEC_EVENEMENTS.md` (spécification, à valider avant le code) | à faire |
-| 46 | 9 · Événements | `events/calendar.py` | à faire |
-| 47 | 9 · Événements | `events/news.py` | à faire |
-| 48 | 9 · Événements | `events/classify.py` | à faire |
+| 46 | 9 · Événements | `docs/SPEC_EVENEMENTS.md` (spécification, à valider avant le code) | à faire |
+| 47 | 9 · Événements | `events/calendar.py` | à faire |
+| 48 | 9 · Événements | `events/news.py` | à faire |
+| 49 | 9 · Événements | `events/classify.py` | à faire |
 
 **Volet intraday — conditionnel.** Il ne démarre que si le cost gate v1 trouve un horizon intraday franchissable (par exemple grâce à un palier de frais plus bas ou à l'exécution maker). Sinon, il reste en attente et le rapport du gate le dit.
 
 | # | Phase | Fichier | Statut |
 |---|---|---|---|
-| 49 | 5 · Collecte | `data/cursor.py` | en attente du gate |
-| 50 | 5 · Collecte | `data/raw_writer.py` | en attente du gate |
-| 51 | 5 · Collecte | `data/collector.py` | en attente du gate |
-| 52 | 5 · Collecte | `data/bronze.py` | en attente du gate |
-| 53 | 5 · Collecte | `data/gaps.py` | en attente du gate |
-| 54 | 5 · Collecte | `data/storage.py` | en attente du gate |
+| 50 | 5 · Collecte | `data/cursor.py` | en attente du gate |
+| 51 | 5 · Collecte | `data/raw_writer.py` | en attente du gate |
+| 52 | 5 · Collecte | `data/collector.py` | en attente du gate |
+| 53 | 5 · Collecte | `data/bronze.py` | en attente du gate |
+| 54 | 5 · Collecte | `data/gaps.py` | en attente du gate |
+| 55 | 5 · Collecte | `data/storage.py` | en attente du gate |
 | — | 5 · Collecte | **Cost gate v2 sur bookTicker collecté** (≥ 7 jours) | en attente du gate |
-| 55 | 6 · Features | `features/kernels.py` | en attente du gate |
-| 56 | 6 · Features | `features/book.py` | en attente du gate |
-| 57 | 6 · Features | `features/flow.py` | en attente du gate |
-| 58 | 6 · Features | `features/spreads.py` | en attente du gate |
-| 59 | 6 · Features | `features/volatility.py` | en attente du gate |
-| 60 | 6 · Features | `features/seasonality.py` | en attente du gate |
-| 61 | 7 · Recherche ID | `sampling/bars.py` | en attente du gate |
-| 62 | 7 · Recherche ID | `sampling/labels.py` | en attente du gate |
-| 63 | 8 · Backtest ID | `backtest/events.py` | en attente du gate |
-| 64 | 8 · Backtest ID | `backtest/fills.py` | en attente du gate |
-| 65 | 8 · Backtest ID | `backtest/engine.py` | en attente du gate |
-| 66 | 8 · Backtest ID | `backtest/leakage.py` | en attente du gate |
+| 56 | 6 · Features | `features/kernels.py` | en attente du gate |
+| 57 | 6 · Features | `features/book.py` | en attente du gate |
+| 58 | 6 · Features | `features/flow.py` | en attente du gate |
+| 59 | 6 · Features | `features/spreads.py` | en attente du gate |
+| 60 | 6 · Features | `features/volatility.py` | en attente du gate |
+| 61 | 6 · Features | `features/seasonality.py` | en attente du gate |
+| 62 | 7 · Recherche ID | `sampling/bars.py` | en attente du gate |
+| 63 | 7 · Recherche ID | `sampling/labels.py` | en attente du gate |
+| 64 | 8 · Backtest ID | `backtest/events.py` | en attente du gate |
+| 65 | 8 · Backtest ID | `backtest/fills.py` | en attente du gate |
+| 66 | 8 · Backtest ID | `backtest/engine.py` | en attente du gate |
+| 67 | 8 · Backtest ID | `backtest/leakage.py` | en attente du gate |
 
 Les petits fichiers sans logique (`__init__.py`, etc.) accompagnent le fichier source suivant au lieu d'occuper un tour.
 
@@ -295,6 +297,18 @@ Idée : réutiliser la connexion (keep-alive) pour économiser une poignée de m
 | connexion réutilisée | 687 ms |
 
 Réutiliser la connexion **ralentit** chaque requête d'environ 400 ms sur ce serveur (reproduit 4 fois, avec `urllib` et avec `http.client`). `core/http.py` garde donc une connexion par requête ; le débit s'obtient par le nombre de téléchargements simultanés (`archives.download_workers`). À retester seulement si le serveur change.
+
+## Cost gate v1 sur données réelles (2026-09-26) — VERDICT OFFICIEL
+
+Cotations Tardis du 1er de chaque mois (BTCEUR et ETHEUR : 80 journées 2020-02 → 2026-09, 93 et 74 millions de cotations ; SOLEUR : 64 journées, 30 millions ; aucune cotation invalide), frais taker **réels** du compte 0,095 %, grille d'une seconde. Ratio = mouvement médian du mid / coût aller-retour médian :
+
+| Paire | Coût médian | 5 s | 60 s | 5 min | 15 min |
+|---|---|---|---|---|---|
+| BTCEUR | 0,195 % | 0,03 | 0,16 | 0,37 | 0,64 |
+| ETHEUR | 0,195 % | 0,05 | 0,22 | 0,50 | 0,86 |
+| SOLEUR | 0,215 % | 0,07 | 0,30 | 0,70 | 1,21 |
+
+**Aucun horizon ≤ 15 min ne dépasse 3, sur aucune paire ni aucune tranche horaire : aucune stratégie intraday n'est testée (§5).** Le spread est négligeable (1 tick) : ce sont les frais qui bloquent. Pour passer le seuil à 15 min, il faudrait un aller-retour d'environ 0,042 % (BTCEUR), 0,056 % (ETHEUR) ou 0,086 % (SOLEUR), soit des frais par jambe 3 à 5 fois plus bas que tes 0,095 % actuels (BTCEUR 5,2×, ETHEUR 3,7×, SOLEUR 3,1×). Le volet intraday reste en attente ; le long terme est la priorité. Rapport complet : `reports/cost_gate_v1_2026-09-26.md`.
 
 ## Estimation préliminaire du gate (2026-09-25, jetable, hors code du projet)
 

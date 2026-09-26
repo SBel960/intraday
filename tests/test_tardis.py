@@ -192,3 +192,17 @@ def test_cli_corrupt_file_fails_cleanly(
         / "BTCUSDT"
         / "2024-03-01.csv.gz"
     ).exists()
+
+
+def test_local_files(tmp_path: Path) -> None:
+    paths = DataPaths(tmp_path)
+    assert tardis.local_files(paths, "BTCUSDT") == []
+    for day in ("2024-02-01", "2024-01-01"):
+        dest = paths.raw_archive("tardis", tardis.file_key("BTCUSDT", day))
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(_csv_gz())
+    (dest.parent / ".tmp-xyz").write_bytes(b"")  # reste d'un crash : ignoré
+    assert [p.name for p in tardis.local_files(paths, "BTCUSDT")] == [
+        "2024-01-01.csv.gz",
+        "2024-02-01.csv.gz",
+    ]

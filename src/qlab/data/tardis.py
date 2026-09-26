@@ -24,6 +24,7 @@ import zlib
 from collections.abc import Callable, Sequence
 from datetime import date
 from functools import partial
+from pathlib import Path
 
 import polars as pl
 
@@ -76,6 +77,12 @@ def file_url(base_url: str, symbol: str, day: str) -> str:
 def file_key(symbol: str, day: str) -> str:
     """Chemin relatif sous ``raw/tardis/``."""
     return f"{EXCHANGE}/{DATA_TYPE}/{symbol}/{day}.csv.gz"
+
+
+def local_files(paths: DataPaths, symbol: str) -> list[Path]:
+    """Journées Tardis déjà téléchargées (et donc vérifiées) pour ``symbol``, par date."""
+    folder = paths.raw_archive(SOURCE, f"{EXCHANGE}/{DATA_TYPE}/{symbol}")
+    return sorted(folder.glob("????-??-??.csv.gz")) if folder.is_dir() else []
 
 
 def verify(data: bytes, symbol: str) -> bytes:
