@@ -128,7 +128,7 @@ intraday/
 │       ├── klines.py              lecture des archives (ms/µs ligne par ligne), contrôle qualité, bougies tronquées marquées, trous
 │       ├── klines_build.py        construction de lt/klines_{1d|1h}/{paire}.parquet, reprise, erreurs isolées par paire
 │       ├── universe.py            univers point-in-time : tradé (chauffe) et observé (1 paire en dollar par actif, stablecoins et tokens à levier exclus, volume médian 30 j ≥ 1 M$)
-│       ├── market_state.py        vue globale : largeur (part des actifs au-dessus de leur moyenne), dispersion, part de BTC dans les volumes, corrélations, financement moyen
+│       ├── market_state.py        vue globale sur l'univers observé : largeur (part des actifs au-dessus de leur moyenne L j), dispersion, part de BTC dans les volumes (corrélations : quand une fiche en aura besoin)
 │       ├── signals.py             momentum série temporelle, moyennes mobiles, momentum transversal, inverse vol
 │       ├── allocation.py          poids cibles → ordres : buy & hold, DCA, rééquilibrage calendaire / bandes, δ_min
 │       ├── lt_costs.py            GATE LT : turnover, drag, rejets minNotional par palier de capital
@@ -205,7 +205,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 35 | 2 · Recherche | `research/report.py` | validé |
 | 36 | 3 · Long terme | `longterm/klines.py` + `longterm/klines_build.py` (+ `core/paths.py` : `lt_klines`) | validé |
 | 37 | 3 · Long terme | `longterm/universe.py` (+ `core/config.py` : `universe.*`, `core/paths.py` : `lt_klines_dir`) | validé |
-| 38 | 3 · Long terme | `longterm/market_state.py` | à faire |
+| 38 | 3 · Long terme | `longterm/market_state.py` | validé |
 | 39 | 3 · Long terme | `longterm/signals.py` | à faire |
 | 40 | 3 · Long terme | `longterm/allocation.py` | à faire |
 | 41 | 3 · Long terme | `longterm/lt_costs.py` | à faire |
