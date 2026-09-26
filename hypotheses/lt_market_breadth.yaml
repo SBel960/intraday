@@ -1,0 +1,23 @@
+id: lt_market_breadth
+title: Filtre d'état du marché (largeur)
+volet: longterm
+created: "2026-09-26"
+mechanism: >-
+  Quand seule une minorité de cryptos est en tendance haussière, les hausses de BTC sont fragiles
+  et les marchés baissiers durables commencent souvent ainsi ; être investi seulement quand la
+  largeur du marché est suffisante évite une grande partie des baisses prolongées.
+horizon_s: 604800
+universe: observe                   # largeur calculée sur tout le marché, point-in-time
+features: [close_1d]
+parameters:
+  - name: ma_days                   # largeur = part des actifs au-dessus de leur moyenne mobile
+    values: [50, 100]
+  - name: min_breadth               # investi (panier des paires tradées) seulement au-dessus
+    values: [0.3, 0.5]
+cost_round_trip_frac: 0.003
+min_edge_frac: 0.03
+edge_basis: per_year
+abandon: >-
+  Abandon si DSR < 0,95, ou si le filtre ne réduit pas le drawdown maximal par rapport au buy &
+  hold, ou si le Sharpe après coûts ne le bat pas avec un intervalle de confiance strictement
+  positif.

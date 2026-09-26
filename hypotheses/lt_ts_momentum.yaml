@@ -1,0 +1,21 @@
+id: lt_ts_momentum
+title: Momentum temporel (suivi de tendance par actif)
+volet: longterm
+created: "2026-09-26"
+mechanism: >-
+  Les investisseurs sous-réagissent puis sur-réagissent aux tendances (ancrage, arrivée
+  progressive de nouveaux acheteurs) : une crypto qui monte sur plusieurs semaines tend à
+  continuer. Rester en cash quand la tendance est négative évite surtout les longues baisses
+  (Moskowitz, Ooi, Pedersen 2012 ; très documenté sur les cryptos).
+horizon_s: 604800                   # réévaluation chaque semaine
+universe: trade                     # BTCEUR, ETHEUR, SOLEUR, poids égaux
+features: [close_1d]
+parameters:
+  - name: lookback_days             # position = 1 si ln(C_t / C_{t-L}) > 0, sinon cash
+    values: [30, 90, 180]
+cost_round_trip_frac: 0.003
+min_edge_frac: 0.03                 # +3 %/an au-delà du buy & hold, après frais
+edge_basis: per_year
+abandon: >-
+  Abandon si, sur la période de test : DSR < 0,95, ou Sharpe après coûts inférieur au buy & hold
+  du même panier, ou drawdown maximal pas meilleur que le buy & hold. Pas de nouveau lookback.

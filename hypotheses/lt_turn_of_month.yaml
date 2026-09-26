@@ -1,0 +1,22 @@
+id: lt_turn_of_month
+title: Saisonnalité de fin et début de mois
+volet: longterm
+created: "2026-09-26"
+mechanism: >-
+  Les flux d'investissement réguliers (salaires, plans d'épargne, DCA automatiques, rebalancements
+  de fonds) arrivent autour du changement de mois et font monter les prix ; être investi seulement
+  sur cette fenêtre capterait l'essentiel de la hausse avec une exposition réduite.
+horizon_s: 432000                   # fenêtre d'environ 5 jours
+universe: trade
+features: [close_1d]
+parameters:
+  - name: pre_days                  # investi des pre_days derniers jours du mois…
+    values: [1, 3]
+  - name: post_days                 # …aux post_days premiers jours du mois suivant
+    values: [3]
+cost_round_trip_frac: 0.003
+min_edge_frac: 0.004
+edge_basis: per_trade
+abandon: >-
+  Abandon si l'edge net médian par fenêtre n'est pas strictement positif (intervalle bootstrap à
+  95 %), si DSR < 0,95, ou si l'effet ne tient pas sur 3 sous-périodes.

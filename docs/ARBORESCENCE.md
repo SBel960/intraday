@@ -50,7 +50,7 @@ intraday/
 │   └── longterm.yaml              lookbacks, bandes de rééquilibrage, DCA (montant, période), vol cible
 ├── hypotheses/
 │   ├── _template.yaml             modèle de fiche d'hypothèse (mécanisme, horizon, features, coût, edge min, abandon)
-│   └── lt_*.yaml                  6 fiches initiales, écrites AVANT tout test (voir « Détection de signal »)
+│   └── lt_*.yaml                  fiches de la vague 1, écrites AVANT tout test (voir « Hypothèses par vagues »)
 ├── src/qlab/
 │   ├── core/
 │   │   ├── config.py              chargement YAML → dataclasses figées et validées ; erreur si une clé manque
@@ -191,7 +191,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 26 | 1 · Gate | `costs/gate_run.py` | validé |
 | — | 1 · Gate | **Cost gate v1 sur données réelles** : book_ticker Tardis (1er de chaque mois) des paires tradées, frais réels du compte (le §5 n'utilise pas les aggTrades) | **fait le 2026-09-26 : aucun horizon ≤ 15 min ne passe** (BTCEUR, ETHEUR, SOLEUR) |
 | 27 | 2 · Recherche | `research/hypothesis.py` (+ `hypotheses/_template.yaml`) | validé |
-| 28 | 2 · Recherche | `hypotheses/lt_*.yaml` : 6 fiches initiales, écrites avant tout test | à faire |
+| 28 | 2 · Recherche | `hypotheses/lt_*.yaml` : 7 fiches de la vague 1, écrites avant tout test (19 essais) | validé (figées) |
 | 29 | 2 · Recherche | `research/trials.py` | à faire |
 | 30 | 2 · Recherche | `research/stats.py` | à faire |
 | 31 | 2 · Recherche | `research/bootstrap.py` | à faire |
@@ -300,6 +300,16 @@ Idée : réutiliser la connexion (keep-alive) pour économiser une poignée de m
 | connexion réutilisée | 687 ms |
 
 Réutiliser la connexion **ralentit** chaque requête d'environ 400 ms sur ce serveur (reproduit 4 fois, avec `urllib` et avec `http.client`). `core/http.py` garde donc une connexion par requête ; le débit s'obtient par le nombre de téléchargements simultanés (`archives.download_workers`). À retester seulement si le serveur change.
+
+## Hypothèses par vagues (décidé le 2026-09-26)
+
+Tester beaucoup d'hypothèses d'un coup rend le Deflated Sharpe impossible à passer (il faut battre le meilleur résultat obtenu par hasard parmi tous les essais) : on avance par vagues, la suivante seulement après le verdict de la précédente. Un seul compteur d'essais pour tout le volet long terme (`research/trials.py`) ; les essais très corrélés sont regroupés pour ne pas pénaliser à tort.
+
+- **Vague 1 (7 fiches, 19 essais)** : momentum temporel (3), momentum transversal (4), faible volatilité (2), retour à la moyenne court terme (2), excès de levier / financement (2), filtre de largeur du marché (4), saisonnalité de fin / début de mois (2).
+- **Vague 2** : rotation BTC → altcoins, cassure de volatilité, choc de volume, proximité du plus haut sur 1 an.
+- **Plus tard** : nouvelles cotations (trop risqué à 50 €), excès de levier par positions ouvertes (historique trop court), offre de stablecoins et événements (sources à ajouter).
+
+**Liens entre hypothèses — rôles, pas concurrence** : ① état du marché (faut-il être investi ?) → ② sélection des actifs → ③ timing par actif → ④ taille (volatilité cible, sans levier) → ⑤ contraintes (minNotional, bandes, frais). Chaque brique est testée seule contre le buy & hold et le DCA, après frais réels ; seules les survivantes sont combinées, et la combinaison est une nouvelle fiche dont les essais s'ajoutent au compteur. Validation finale sur une période jamais touchée, puis paper trading.
 
 ## Cost gate v1 sur données réelles (2026-09-26) — VERDICT OFFICIEL
 

@@ -1,0 +1,20 @@
+id: lt_low_volatility
+title: Faible volatilité (inverse de la volatilité)
+volet: longterm
+created: "2026-09-26"
+mechanism: >-
+  Les investisseurs contraints ou joueurs surpayent les actifs très volatils (effet loterie) ;
+  les actifs les moins volatils offrent donc un meilleur rendement ajusté du risque. Pondérer
+  par l'inverse de la volatilité réduit aussi les pertes lors des krachs.
+horizon_s: 2592000                  # rééquilibrage mensuel
+universe: trade
+features: [close_1d]
+parameters:
+  - name: vol_lookback_days         # w_i ∝ 1 / σ_i estimé sur ce nombre de jours
+    values: [30, 90]
+cost_round_trip_frac: 0.003
+min_edge_frac: 0.02
+edge_basis: per_year
+abandon: >-
+  Abandon si le Sharpe après coûts ne dépasse pas celui du panier équipondéré avec un intervalle
+  de confiance à 95 % strictement positif, ou si DSR < 0,95.

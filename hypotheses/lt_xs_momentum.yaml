@@ -1,0 +1,24 @@
+id: lt_xs_momentum
+title: Momentum transversal (acheter les plus fortes)
+volet: longterm
+created: "2026-09-26"
+mechanism: >-
+  Les capitaux se concentrent sur les cryptos qui surperforment (attention médiatique, flux des
+  suiveurs de tendance) : les meilleures des dernières semaines, hors dernière semaine (qui tend à
+  se retourner), continuent de battre les autres. Testé sur tout le marché pour la puissance
+  statistique, appliqué ensuite aux seules paires EUR.
+horizon_s: 604800
+universe: observe                   # univers point-in-time, retirées comprises
+features: [close_1d, volume_quote_1d]
+parameters:
+  - name: lookback_days             # classement sur ln(C_{t-7} / C_{t-L}), 7 derniers jours sautés
+    values: [30, 90]
+  - name: top_k                     # nombre d'actifs détenus, poids égaux
+    values: [1, 3]
+cost_round_trip_frac: 0.003
+min_edge_frac: 0.03
+edge_basis: per_year
+abandon: >-
+  Abandon si DSR < 0,95, ou si l'écart de Sharpe avec le panier équipondéré n'a pas un intervalle
+  de confiance à 95 % strictement positif, ou si le résultat ne tient pas sur au moins 3
+  sous-périodes dont un marché baissier.

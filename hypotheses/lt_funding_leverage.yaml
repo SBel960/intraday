@@ -1,0 +1,20 @@
+id: lt_funding_leverage
+title: Excès de levier (taux de financement extrême)
+volet: longterm
+created: "2026-09-26"
+mechanism: >-
+  Un taux de financement des contrats perpétuels très élevé signifie que les acheteurs à levier
+  paient cher pour le rester : le marché est surchargé en positions longues fragiles, dont la
+  liquidation en cascade provoque des chutes. Sortir du marché dans ces phases réduit les pertes.
+horizon_s: 604800
+universe: trade
+features: [close_1d, funding_rate_8h]
+parameters:
+  - name: funding_quantile          # cash si le financement moyen dépasse ce quantile (1 an glissant)
+    values: [0.8, 0.9]
+cost_round_trip_frac: 0.003
+min_edge_frac: 0.02
+edge_basis: per_year
+abandon: >-
+  Abandon si la réduction du drawdown maximal et le Sharpe après coûts ne battent pas le buy &
+  hold du même panier, ou si DSR < 0,95. Données de financement disponibles depuis 2020 seulement.

@@ -1,0 +1,21 @@
+id: lt_short_reversal
+title: Retour à la moyenne de court terme (acheter les chutes excessives)
+volet: longterm
+created: "2026-09-26"
+mechanism: >-
+  Les chutes brutales sur quelques jours sont souvent amplifiées par des ventes forcées
+  (liquidations, appels de marge) plutôt que par l'information : fournir de la liquidité en
+  achetant après ces excès est rémunéré par un rebond partiel la semaine suivante.
+horizon_s: 604800                   # détention d'une semaine
+universe: trade
+features: [close_1d]
+parameters:
+  - name: drop_lookback_days        # achat si la baisse sur ce nombre de jours est la plus forte
+    values: [3, 7]
+cost_round_trip_frac: 0.003
+min_edge_frac: 0.004                # par trade : doit couvrir largement le coût de 0,30 %
+edge_basis: per_trade
+abandon: >-
+  Abandon si l'edge net médian par trade n'est pas strictement positif (intervalle de confiance
+  bootstrap à 95 %), ou si DSR < 0,95. Rotation élevée : abandon aussi si le frottement annuel
+  dépasse la moitié de l'edge visé (lt_costs).
