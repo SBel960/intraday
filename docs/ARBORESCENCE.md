@@ -125,7 +125,8 @@ intraday/
 │   │   ├── news.py                collecte d'annonces (Binance, GDELT…), horodatées à la RÉCEPTION, RAW append-only
 │   │   └── classify.py            classement des annonces → drapeaux de risque ; modèle et prompt versionnés
 │   └── longterm/
-│       ├── klines.py              bougies 1d / 1h → Bronze, contrôle qualité, trous marqués
+│       ├── klines.py              lecture des archives (ms/µs ligne par ligne), contrôle qualité, bougies tronquées marquées, trous
+│       ├── klines_build.py        construction de lt/klines_{1d|1h}/{paire}.parquet, reprise, erreurs isolées par paire
 │       ├── universe.py            univers point-in-time (listing, délisting, chauffe) sans biais du survivant
 │       ├── market_state.py        vue globale : largeur (part des actifs au-dessus de leur moyenne), dispersion, part de BTC dans les volumes, corrélations, financement moyen
 │       ├── signals.py             momentum série temporelle, moyennes mobiles, momentum transversal, inverse vol
@@ -202,7 +203,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 33 | 2 · Recherche | `research/cv.py` | validé |
 | 34 | 2 · Recherche | `research/ic.py` (remonté de l'intraday ; version transversale) | validé |
 | 35 | 2 · Recherche | `research/report.py` | validé |
-| 36 | 3 · Long terme | `longterm/klines.py` | à faire |
+| 36 | 3 · Long terme | `longterm/klines.py` + `longterm/klines_build.py` (+ `core/paths.py` : `lt_klines`) | validé |
 | 37 | 3 · Long terme | `longterm/universe.py` | à faire |
 | 38 | 3 · Long terme | `longterm/market_state.py` | à faire |
 | 39 | 3 · Long terme | `longterm/signals.py` | à faire |

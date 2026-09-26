@@ -1,9 +1,14 @@
-"""Doublures de test partagées (aucun réseau) : faux bucket S3 de data.binance.vision."""
+"""Doublures de test partagées (aucun réseau) : faux bucket S3 de data.binance.vision, archives
+de bougies construites à la main."""
 
 from __future__ import annotations
 
 import hashlib
 import urllib.parse
+import zipfile
+from pathlib import Path
+
+from qlab.core.paths import DataPaths
 
 NS = "http://s3.amazonaws.com/doc/2006-03-01/"
 
@@ -142,3 +147,34 @@ def exchange_info(symbols: list[dict[str, object]], server_time: int = T0) -> di
         "exchangeFilters": [],
         "symbols": symbols,
     }
+
+
+# --- bougies Binance (archives spot) --------------------------------------------------------
+
+KLINE_DAY_MS = 86_400_000
+
+
+def kline_row(t_ms: int, close: float = 100.0, *, us: bool = False, **kw: float) -> str:
+    """Bougie 1d cohérente (open 100, high 110, low 90) ; ``kw`` écrase un champ ; ``us`` :
+    horodatages en µs comme les archives depuis 2025."""
+    v = {"open": 100.0, "high": 110.0, "low": 90.0, "close": close, "vol": 2.0, **kw}
+    k = 1000 if us else 1
+    return (
+        f"{t_ms * k},{v['open']},{v['high']},{v['low']},{v['close']},{v['vol']},"
+        f"{(t_ms + KLINE_DAY_MS) * k - 1},{v['vol'] * close},7,1.0,{close},0"
+    )
+
+
+def kline_csv(*rows: str) -> bytes:
+    return ("\n".join(rows) + "\n").encode()
+
+
+def kline_archive(
+    paths: DataPaths, kind: str, name: str, data: bytes, symbol: str = "BTCEUR"
+) -> Path:
+    """Archive ``spot/{kind}/klines/{symbol}/1d/{name}.zip`` de ``raw/binance_vision``."""
+    path = paths.raw_archive("binance_vision", f"spot/{kind}/klines/{symbol}/1d/{name}.zip")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr(f"{name}.csv", data)
+    return path
