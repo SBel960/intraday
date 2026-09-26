@@ -131,7 +131,7 @@ intraday/
 │       ├── funding.py             taux de financement USDⓈ-M → lt/futures/funding/{contrat}.parquet (heure exacte, intervalle lu par ligne), somme par jour
 │       ├── market_state.py        vue globale sur l'univers observé : largeur (part des actifs au-dessus de leur moyenne L j), dispersion, part de BTC dans les volumes (corrélations : quand une fiche en aura besoin)
 │       ├── signals.py             signaux des 7 fiches → poids cibles (grille journalière complète, décidés à la clôture de t, long seulement, somme ≤ 1)
-│       ├── allocation.py          poids cibles → ordres : buy & hold, DCA, rééquilibrage calendaire / bandes, δ_min
+│       ├── allocation.py          poids cibles → échanges (fractions de V) : buy & hold, calendaire (dates de DCA comprises), bandes, δ_min compté, cash jamais négatif, dérive des poids
 │       ├── lt_costs.py            GATE LT : turnover, drag, rejets minNotional par palier de capital
 │       ├── lt_backtest.py         barre à barre (décision clôture t, exécution ouverture t+1), apports, TWR / MWR
 │       └── lt_report.py           CAGR, vol, MaxDD, Calmar, Sortino, PSR / DSR / MinTRL, vs buy & hold et DCA
@@ -209,7 +209,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 38 | 3 · Long terme | `longterm/market_state.py` | validé |
 | 38 bis | 3 · Long terme | `longterm/funding.py` (+ `core/paths.py` : `lt_futures`) | validé |
 | 39 | 3 · Long terme | `longterm/signals.py` | validé |
-| 40 | 3 · Long terme | `longterm/allocation.py` | à faire |
+| 40 | 3 · Long terme | `longterm/allocation.py` | validé |
 | 41 | 3 · Long terme | `longterm/lt_costs.py` | à faire |
 | 42 | 3 · Long terme | `sizing/sizing.py` | à faire |
 | 43 | 3 · Long terme | `longterm/lt_backtest.py` | à faire |
