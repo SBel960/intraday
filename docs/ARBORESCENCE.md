@@ -133,11 +133,12 @@ intraday/
 │       ├── market_state.py        vue globale sur l'univers observé : largeur (part des actifs au-dessus de leur moyenne L j), dispersion, part de BTC dans les volumes (corrélations : quand une fiche en aura besoin)
 │       ├── signals.py             signaux des 7 fiches → poids cibles (grille journalière complète, décidés à la clôture de t, long seulement, somme ≤ 1)
 │       ├── allocation.py          poids cibles → échanges (fractions de V) : buy & hold, calendaire (dates de DCA comprises), bandes, δ_min compté, cash jamais négatif, dérive des poids
-│       ├── strategies.py          table fiche → signal, données (Market), rééquilibrage ; commande du gate LT officiel (rapport reports/lt_costs_*.md)
+│       ├── strategies.py          table fiche → signal, données (Market, Panel de l'univers trade_eur), rééquilibrage
 │       ├── lt_costs.py            GATE LT : rejeu des poids sans performance → turnover, drag, rejets minNotional, coûts/edge de la fiche, par palier
 │       ├── lt_backtest.py         barre à barre en Decimal : décision clôture t, exécution ouverture t+1 (impact, frais réels, lot.py), δ_min réel, apports, TWR ; peek = tricheur du test anti-fuite
 │       ├── lt_report.py           mesures d'un essai (CAGR, vol, Sharpe, MaxDD et durée, Calmar, Sortino, MWR), DCA, moments pour le registre, rendu vs buy & hold et DCA
-│       └── lt_wave.py             verdict d'une vague : essais qui passent le gate LT → backtest, enregistrement de l'essai, références, critères, rapport
+│       ├── lt_evaluate.py         évaluation d'un essai : univers de la fiche (tradé ou trade_eur), fenêtre après chauffe, buy & hold, DCA, stabilité par actif ou par moitiés d'univers, oracle
+│       └── lt_wave.py             vague : gate de coûts (tous paliers : `costs`), backtest des essais retenus, enregistrement avant verdict, essais déjà jugés gardés, rapport
 └── tests/
     ├── conftest.py                uniquement la fixture de config temporaire (tmp_path) ; les données de test sont dans chaque test
     └── test_<nom>.py              un fichier de test par module source (données construites à la main, valeurs attendues écrites)
@@ -222,6 +223,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 42 | 3 · Long terme | `sizing/sizing.py` | validé |
 | 43 | 3 · Long terme | `longterm/lt_backtest.py` (+ `oracle_weights`) | validé |
 | 44 | 3 · Long terme | `longterm/lt_report.py` | validé |
+| 44 ter | 3 · Long terme | `longterm/lt_evaluate.py` (sorti de `lt_wave`) + univers `trade_eur` dans le gate et le backtest ; commande `costs` déplacée de `strategies` vers `lt_wave` ; `pair_rules` seule source du coût d'un ordre | validé |
 | 44 bis | 3 · Long terme | `longterm/lt_wave.py` (+ `signals.equal_weight`, `strategies.multi_asset` et `breadth_lengths`, config `acceptance` ; spreads mesurés, essais déjà jugés gardés) | validé |
 | 45 | 4 · Paper LT | `live/risk.py` | à faire |
 | 46 | 4 · Paper LT | `live/broker.py` | à faire |
@@ -333,7 +335,7 @@ Tester beaucoup d'hypothèses d'un coup rend le Deflated Sharpe impossible à pa
 
 - **Vague 1 (7 fiches, 17 essais)** : momentum temporel (3), momentum transversal (2 ; k=3 retiré avant tout test : avec 3 paires tradées, c'est le panier de référence), faible volatilité (2), retour à la moyenne court terme (2), excès de levier / financement (2), filtre de largeur du marché (4), saisonnalité de fin / début de mois (2).
 - **Vague 1 — verdict (2026-09-26, 50 €)** : 11 essais écartés par le gate de coûts, 6 backtestés et enregistrés, **tous rejetés** (DSR > 0,95 mais écart de Sharpe vs buy & hold non significatif et instable d'une année à l'autre). Rapport : `reports/lt_wave_2026-09-26.md`.
-- **Vague 2 (5 fiches, 10 essais, figées le 2026-09-26 dans `hypotheses/vague2/`)** : rotation BTC → altcoins (`cf0c1cf3d544`), cassure du plus haut récent (`e8918926632d`), choc de volume (`6d35930815a8`), proximité du plus haut sur un an (`4d6af6de2e75`), momentum transversal sur les paires EUR liquides ≥ 100 k€/jour (`cde85ab9332b`). 4 d'entre elles ont rejoint `hypotheses/` avec leurs signaux ; `lt_xs_momentum_eur` attend l'univers tradé élargi dans le gate et le backtest ; avant le gate : spreads réels des paires EUR mesurés.
+- **Vague 2 (5 fiches, 10 essais, figées le 2026-09-26 dans `hypotheses/vague2/`)** : rotation BTC → altcoins (`cf0c1cf3d544`), cassure du plus haut récent (`e8918926632d`), choc de volume (`6d35930815a8`), proximité du plus haut sur un an (`4d6af6de2e75`), momentum transversal sur les paires EUR liquides ≥ 100 k€/jour (`cde85ab9332b`). toutes ont rejoint `hypotheses/` avec leurs signaux ; avant le gate : spreads réels des paires EUR mesurés.
 - **Plus tard** : nouvelles cotations (trop risqué à 50 €), excès de levier par positions ouvertes (historique trop court), offre de stablecoins et événements (sources à ajouter).
 
 **Liens entre hypothèses — rôles, pas concurrence** : ① état du marché (faut-il être investi ?) → ② sélection des actifs → ③ timing par actif → ④ taille (volatilité cible, sans levier) → ⑤ contraintes (minNotional, bandes, frais). Chaque brique est testée seule contre le buy & hold et le DCA, après frais réels ; seules les survivantes sont combinées, et la combinaison est une nouvelle fiche dont les essais s'ajoutent au compteur. Validation finale sur une période jamais touchée, puis paper trading.

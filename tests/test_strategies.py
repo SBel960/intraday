@@ -9,14 +9,11 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 import pytest
-from fakes import FALLBACK_FEES, binance_symbol, exchange_info
 
 from qlab.core.config import load_config
 from qlab.core.errors import DataError
 from qlab.core.paths import DataPaths
 from qlab.core.timeutils import MS_PER_DAY, date_to_ms
-from qlab.exchange.snapshots import SnapshotStore
-from qlab.longterm import funding
 from qlab.longterm import strategies as st
 from qlab.longterm.signals import DATE
 from qlab.research.hypothesis import Hypothesis, load_all
@@ -50,7 +47,12 @@ def test_policies_follow_fiche_horizons() -> None:
 
 def test_multi_asset_fiches_are_flagged() -> None:
     flagged = {k for k, s in st.REGISTRY.items() if s.multi_asset}
-    assert flagged == {"lt_xs_momentum", "lt_low_volatility", "lt_btc_alt_rotation"}
+    assert flagged == {
+        "lt_xs_momentum",
+        "lt_low_volatility",
+        "lt_btc_alt_rotation",
+        "lt_xs_momentum_eur",
+    }
 
 
 def test_rotation_needs_a_btc_pair() -> None:
@@ -79,11 +81,13 @@ def _market(days: int = 420) -> st.Market:
     cfg = load_config(Path(__file__).resolve().parent.parent / "config").longterm.signals
     volumes = closes.with_columns(pl.exclude(DATE).abs() * 1e6)
     bases = {s: s.removesuffix("USDT") for s in TRADE}
-    return st.Market(closes, volumes, fund, {50: breadth, 100: breadth}, 365, cfg, bases)
+    members = closes.select(DATE, *(pl.col(s).is_not_null() for s in TRADE))
+    quoted = st.Panel(closes, closes, members)  # univers trade_eur : les mêmes paires ici
+    return st.Market(closes, volumes, fund, {50: breadth, 100: breadth}, 365, cfg, bases, quoted)
 
 
 def test_every_trial_builds_valid_weights() -> None:
-    """Les 25 essais (vague 1 et 4 fiches de la vague 2) : même grille, poids ≥ 0, somme ≤ 1."""
+    """Les 27 essais (vagues 1 et 2) : poids ≥ 0, somme ≤ 1, grille des prix de leur univers."""
     market, n = _market(), 0
     for h in FICHES:
         for params in h.grid():
@@ -92,7 +96,7 @@ def test_every_trial_builds_valid_weights() -> None:
             x = w.drop(DATE).to_numpy()
             assert (x >= 0).all() and (x.sum(axis=1) <= 1 + 1e-12).all(), st.trial_name(h, params)
             n += 1
-    assert n == 25
+    assert n == 27
 
 
 def _write_klines(paths: DataPaths, symbol: str, closes: np.ndarray, volume: float) -> None:
@@ -114,23 +118,3 @@ def _write_funding(paths: DataPaths, symbol: str, days: int) -> None:
     rows = "\n".join(f"{T0 + k * 8 * 3_600_000 + 1},8,0.0001" for k in range(3 * days))
     with zipfile.ZipFile(path, "w") as z:
         z.writestr("f.csv", "calc_time,funding_interval_hours,last_funding_rate\n" + rows + "\n")
-
-
-def test_costs_command_end_to_end(config_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    paths = DataPaths(config_dir.parent / "data")
-    assert st.main(["--config", str(config_dir), "costs"]) == 1  # pas de snapshot
-    symbols = [binance_symbol(s, "USDT") for s in TRADE]
-    SnapshotStore(paths, "binance").save(exchange_info(symbols), FALLBACK_FEES, T0, "https://x")
-    rng = np.random.default_rng(1)
-    for s in TRADE:
-        _write_klines(paths, s, np.exp(np.cumsum(rng.normal(0, 0.03, 420))), volume=2e6)
-        _write_funding(paths, s, 420)
-    assert funding.main(["--config", str(config_dir), "build"]) == 0
-    hyp = str(Path(__file__).resolve().parent.parent / "hypotheses")
-    assert st.main(["--config", str(config_dir), "costs", "--hypotheses", hyp]) == 0
-    out = capsys.readouterr().out
-    report = next((paths.reports).glob("lt_costs_*.md")).read_text()
-    assert report.startswith("# Gate de coûts long terme")
-    assert report.count("| lt_") == 25 * 2  # 25 essais × 2 paliers (config de test)
-    assert "lt_market_breadth · ma_days=100, min_breadth=0.5 | t1 |" in report
-    assert "Rapport :" in out

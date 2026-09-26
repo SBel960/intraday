@@ -7,280 +7,175 @@ Pour un palier de capital (``--tier``, capital de départ du backtest) :
 2. les essais retenus sont backtestés (``lt_backtest``) et **tous enregistrés** dans le registre
    d'essais **avant** tout calcul de verdict : N et la dispersion des Sharpe du DSR comptent
    tout ce qui a été essayé dans le volet ;
-3. chaque essai est comparé au **buy & hold** du panier équipondéré (même moteur, mêmes coûts)
-   et au **DCA** (TWR et MWR) ; stabilité par année civile ; « actifs » : la même règle rejouée
-   sur chaque actif seul, ou sur chaque sous-panier de 2 pour une fiche multi-actifs ;
+3. chaque essai est évalué par ``lt_evaluate`` : univers de la fiche, références (buy & hold,
+   DCA), stabilité par année et par actif, fenêtre après la chauffe ;
 4. contrôle anti-fuite du pipeline (LT.5), une fois par vague sur les vrais prix : un oracle
-   qui connaît le rendement qu'il va détenir (``peek`` d'une règle construite sur l'avenir)
-   doit écraser le buy & hold ; sinon le moteur est suspect et le rapport le dit en tête.
-   (Un « tricheur » par essai n'est pas un bon test : connaître les poids de demain d'une
-   fiche de faible volatilité ne dit rien des rendements) ;
+   qui connaît le rendement qu'il va détenir doit écraser le buy & hold, sinon le rapport
+   l'écrit en tête (un « tricheur » par essai n'est pas un bon test : connaître les poids de
+   demain d'une fiche de faible volatilité ne dit rien des rendements) ;
+   un essai déjà enregistré (jugé dans une vague précédente) n'est ni regaté ni rejugé ;
 5. critères et verdict (``research/report.py``), rapport ``reports/lt_wave_{date}.md``.
 
-Commande : ``python -m qlab.longterm.lt_wave --config config run [--tier t0]
-[--hypotheses hypotheses]``
+Commandes : ``python -m qlab.longterm.lt_wave --config config run [--tier t0]`` (verdict) et
+``... costs`` (gate de coûts de tous les paliers, sans backtest) ; ``--hypotheses hypotheses``.
 """
 
 from __future__ import annotations
 
 import argparse
-import dataclasses
-import itertools
 from collections.abc import Sequence
-from decimal import Decimal
 from pathlib import Path
 
 import numpy as np
-import polars as pl
 
 from qlab.core.cli import Context, run_command
-from qlab.core.config import CapitalTier, QlabConfig
 from qlab.core.errors import DataError
 from qlab.core.files import write_atomic
 from qlab.core.timeutils import date_str, now_ms
-from qlab.exchange.snapshots import Snapshot, SnapshotStore
+from qlab.exchange.snapshots import SnapshotStore
 from qlab.exchange.spreads import medians as spread_medians
-from qlab.longterm import klines, lt_backtest, lt_costs, lt_report, strategies, universe
+from qlab.longterm import klines, lt_backtest, lt_costs, strategies, universe
+from qlab.longterm import lt_evaluate as ev
 from qlab.longterm import signals as sg
-from qlab.longterm.allocation import Policy
-from qlab.research import report as research_report
 from qlab.research.hypothesis import Hypothesis, load_all
-from qlab.research.trials import TrialRegistry, TrialResult
-
-BUY_HOLD = Policy("buy_hold")
-NOTES = (
-    "Filtres d'ordre (pas, minimum) du snapshot actuel appliqués à tout l'historique.",
-    "Buy & hold : achat unique au départ ; une paire cotée plus tard n'y entre pas.",
-)
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class Setup:
-    """Tout ce qu'il faut pour rejouer les essais à un palier de capital."""
-
-    config: QlabConfig
-    snapshot: Snapshot
-    market: strategies.Market
-    opens: pl.DataFrame  # même grille que ``market.closes``
-    rules: dict[str, lt_backtest.PairRules]
-    tier: CapitalTier
-    spreads: dict[str, float]  # médianes mesurées (``exchange/spreads.py``), paires sûres
-
-    @property
-    def capital(self) -> Decimal:
-        return Decimal(str(self.tier.capital_quote))
-
-
-def _returns(
-    setup: Setup, weights: pl.DataFrame, policy: Policy, closes: pl.DataFrame
-) -> np.ndarray:
-    opens = setup.opens.join(closes.select(sg.DATE), on=sg.DATE, how="semi").select(closes.columns)
-    res = lt_backtest.run(weights, opens, closes, policy, setup.rules, initial_quote=setup.capital)
-    return res.twr_returns()
-
-
-def _per_asset(
-    setup: Setup, hypothesis: Hypothesis, params: dict[str, float], policy: Policy
-) -> dict[str, tuple[np.ndarray, np.ndarray]]:
-    """La même règle sur chaque actif seul (ou sous-panier de 2), face à son buy & hold."""
-    assets = [c for c in setup.market.closes.columns if c != sg.DATE]
-    size = 2 if strategies.strategy_for(hypothesis).multi_asset else 1
-    out = {}
-    for group in itertools.combinations(assets, size):
-        both = setup.market.closes.select(sg.DATE, *group)
-        dates = both[sg.DATE].to_numpy()
-        start = max(int(dates[both[a].is_not_null().to_numpy()].min()) for a in group)
-        closes = both.filter(pl.col(sg.DATE) >= start)  # grille complète depuis que tous existent
-        sub = dataclasses.replace(setup.market, closes=closes)
-        weights = strategies.strategy_for(hypothesis).build(sub, params)
-        first = first_decision(weights)
-        out["+".join(group)] = (
-            _returns(setup, weights, policy, closes)[first:],
-            _returns(setup, sg.equal_weight(closes), BUY_HOLD, closes)[first:],
-        )
-    return out
-
-
-def first_decision(weights: pl.DataFrame) -> int:
-    """Indice du premier jour où la stratégie veut être investie : la chauffe de ses signaux
-    (ex. un an de financement) est exclue de l'évaluation, pour elle comme pour ses références
-    (le rendement d'indice t va du jour t au jour t + 1 : il porte la première exécution)."""
-    invested = weights.select(pl.sum_horizontal(pl.exclude(sg.DATE)) > 0)[:, 0].to_numpy()
-    return int(invested.argmax()) if invested.any() else 0  # jamais investi : toute la période
-
-
-def _criteria(config: QlabConfig) -> research_report.Criteria:
-    a = config.longterm.acceptance
-    return research_report.Criteria(
-        a.dsr_min,
-        a.confidence,
-        a.min_subperiods,
-        a.min_assets,
-        a.require_bear,
-        a.n_boot,
-        a.mean_block_days,
-        a.seed,
-    )
-
-
-Kept = tuple[Hypothesis, dict[str, float], Policy, pl.DataFrame]
-Refs = tuple[np.ndarray, int, float]  # rendements du buy & hold (grille entière), N, V[SR]
+from qlab.research.trials import TrialRegistry
 
 
 def _gate(
-    setup: Setup, hypotheses: Sequence[Hypothesis], registry: TrialRegistry
-) -> tuple[list[Kept], list[str]]:
-    """Gate de coûts au palier : essais retenus et une ligne de rapport par essai. Un essai
-    déjà enregistré (jugé dans une vague précédente) n'est ni regaté ni rejugé."""
+    setup: ev.Setup, hypotheses: Sequence[Hypothesis], registry: TrialRegistry
+) -> tuple[list[ev.Kept], list[str]]:
+    """Gate de coûts au palier, dans l'univers de chaque fiche : essais retenus et une ligne de
+    rapport par essai. Un essai déjà enregistré n'est ni regaté ni rejugé."""
     cfg, market = setup.config, setup.market
-    costs = lt_costs.tier_costs(cfg, setup.snapshot, setup.tier, setup.spreads)
     kept, lines = [], [f"## Gate de coûts au palier {setup.tier.name}", ""]
     for h in hypotheses:
-        policy = strategies.policy_for(h)
+        policy, universe_ = strategies.policy_for(h), ev.panel(setup, h)
+        symbols = [c for c in universe_.closes.columns if c != sg.DATE]
+        costs = lt_costs.tier_costs(cfg, setup.snapshot, setup.tier, setup.spreads, symbols)
         for params in h.grid():
+            name = strategies.trial_name(h, params)
             judged = registry.find("longterm", h.id, params)
             if judged is not None:
-                when = date_str(judged.ts_ms)
-                lines.append(
-                    f"- {strategies.trial_name(h, params)} : déjà jugé le {when}, verdict gardé"
-                )
+                lines.append(f"- {name} : déjà jugé le {date_str(judged.ts_ms)}, verdict gardé")
                 continue
             weights = strategies.strategy_for(h).build(market, params)
-            cost = lt_costs.simulate(weights, market.closes, policy, costs, market.days_per_year)
+            ppy = market.days_per_year
+            cost = lt_costs.simulate(weights, universe_.closes, policy, costs, ppy)
             verdict = lt_costs.gate(cost, h, cfg.longterm.costs)
-            name = strategies.trial_name(h, params)
             lines.append(f"- {name} : {verdict.label} ({verdict.detail})")
             if verdict.passed:
                 kept.append((h, params, policy, weights))
     return kept, lines
 
 
-def _result(returns: np.ndarray, ppy: int) -> TrialResult:
-    """Moments de l'essai ; jamais investi (rendements constants) ⇒ Sharpe 0 par convention
-    (loi normale : asymétrie 0, kurtosis 3) : l'essai compte quand même dans N."""
-    if np.ptp(returns) == 0:
-        return TrialResult(0.0, returns.size, 0.0, 3.0, ppy)
-    return lt_report.trial_result(returns, ppy)
-
-
-def _judge(setup: Setup, trial: Kept, returns: np.ndarray, refs: Refs) -> str:
-    """Verdict d'un essai face aux références, sur sa fenêtre d'évaluation (après chauffe) ;
-    non évaluable ⇒ dit pourquoi."""
-    h, params, policy, weights = trial
-    full_bench, n_trials, variance = refs
-    first = first_decision(weights)
-    bench = full_bench[first:]
-    name, ppy = strategies.trial_name(h, params), setup.market.days_per_year
-    dates = setup.market.closes[sg.DATE].to_list()
-    labels = lt_report.year_labels(dates)[first:]
-    window = f"Évaluation du {date_str(dates[first])} au {date_str(dates[-1])} (chauffe exclue)."
-    try:
-        dca = _dca(setup, first)
-        per_asset = _per_asset(setup, h, params, policy)
-        evidence = research_report.Evidence(
-            name, returns, bench, labels, per_asset, n_trials, variance, ppy
-        )
-        report = research_report.evaluate(evidence, _criteria(setup.config))
-        strategy_metrics = lt_report.metrics(returns, ppy)
-    except DataError as e:  # ex. jamais investi : Sharpe indéfini
-        return f"## {name}\n\n**Verdict : {research_report.REJECTED}** (non évaluable : {e})\n"
-    bench_metrics = lt_report.metrics(bench, ppy)
-    notes = [window, _spread_note(setup), *NOTES]
-    return lt_report.render(report, strategy_metrics, bench_metrics, dca, notes)
-
-
-def _spread_note(setup: Setup) -> str:
-    cfg = setup.config.longterm.costs
-    measured = sorted(s for s in setup.rules if s in setup.spreads)
-    assumed = sorted(s for s in setup.rules if s not in setup.spreads)
-    parts = []
-    if measured:
-        parts.append(
-            f"spreads mesurés (médiane ≥ {cfg.spread_min_samples} relevés) : {', '.join(measured)}"
-        )
-    if assumed:
-        parts.append(f"spread supposé {cfg.fallback_spread_frac:.2%} : {', '.join(assumed)}")
-    return "Coûts : " + " ; ".join(parts) + " (spreads actuels appliqués à tout l'historique)."
-
-
-def run_wave(setup: Setup, hypotheses: Sequence[Hypothesis], registry: TrialRegistry) -> str:
+def run_wave(setup: ev.Setup, hypotheses: Sequence[Hypothesis], registry: TrialRegistry) -> str:
     """Rapport Markdown de la vague (voir l'en-tête)."""
-    ppy, closes = setup.market.days_per_year, setup.market.closes
+    ppy = setup.market.days_per_year
     kept, lines = _gate(setup, hypotheses, registry)
-    returns = []
+    measured = []
     for h, params, policy, weights in kept:  # 1) tout enregistrer d'abord
-        r = _returns(setup, weights, policy, closes)[first_decision(weights) :]
-        registry.record(h, params, _result(r, ppy), ts_ms=now_ms(), note=setup.tier.name)
-        returns.append(r)
+        universe_ = ev.panel(setup, h)
+        r = ev.returns(setup, weights, policy, universe_.closes, universe_.opens)
+        r = r[ev.first_decision(weights) :]
+        registry.record(h, params, ev.trial_result(r, ppy), ts_ms=now_ms(), note=setup.tier.name)
+        measured.append(r)
     n_trials = registry.n_trials("longterm")
     variance = float(np.var(registry.sharpes("longterm")))
-    bench = _returns(setup, sg.equal_weight(closes), BUY_HOLD, closes)
+    trade = strategies.Panel(setup.market.closes, setup.opens)
+    bench = ev.returns(setup, sg.equal_weight(trade.closes), ev.BUY_HOLD, trade.closes, trade.opens)
     lines += [
         "",
-        _oracle_check(setup, bench),
+        ev.oracle_check(setup, bench),
         f"N = {n_trials} essais dans le volet ; V[SR] = {variance:.2e}",
         "",
     ]
-    for trial, r in zip(kept, returns, strict=True):  # 2) puis juger
-        lines.append(_judge(setup, trial, r, (bench, n_trials, variance)))
+    for trial, r in zip(kept, measured, strict=True):  # 2) puis juger
+        lines.append(ev.judge(setup, trial, r, n_trials, variance))
     return "\n".join(lines)
 
 
-def _oracle_check(setup: Setup, bench: np.ndarray) -> str:
-    """L'oracle (``lt_backtest.oracle_weights``) doit multiplier le buy & hold (≥ × 2)."""
-    daily = Policy("calendar", period_days=1)
-    oracle = _returns(setup, lt_backtest.oracle_weights(setup.opens), daily, setup.market.closes)
-    ratio = float(np.prod(1 + oracle) / np.prod(1 + bench))
-    suspect = "**SUSPECT : le moteur ne récompense pas la connaissance de l'avenir**"
-    verdict = "ok" if ratio > 2 else suspect
-    return f"Contrôle anti-fuite du pipeline (oracle / buy & hold = {ratio:.3g}) : {verdict}"
-
-
-def _dca(setup: Setup, first: int) -> tuple[lt_report.Metrics, float]:
-    """DCA de référence sur la même fenêtre que l'essai (à partir de ``first``)."""
-    cfg = setup.config.longterm.dca
-    closes, opens = setup.market.closes[first:], setup.opens[first:]
-    dates = closes[sg.DATE].to_list()
-    flows = lt_report.dca_flows(dates, Decimal(str(cfg.amount_quote)), cfg.period_days)
-    weights = sg.equal_weight(closes)
-    policy = Policy("calendar", period_days=cfg.period_days)
-    res = lt_backtest.run(
-        weights, opens, closes, policy, setup.rules, initial_quote=Decimal(0), flows=flows
-    )
-    ppy = setup.market.days_per_year
-    return lt_report.metrics(res.twr_returns(), ppy), lt_report.mwr(res.flows, res.equity[-1], ppy)
+def cost_rows(setup: ev.Setup, hypotheses: Sequence[Hypothesis]) -> list[lt_costs.Row]:
+    """Gate de coûts de chaque essai à **chaque** palier, dans l'univers de sa fiche (rapport
+    ``lt_costs`` ; n'enregistre rien : aucune performance n'est calculée)."""
+    cfg, market = setup.config, setup.market
+    rows = []
+    for h in hypotheses:
+        policy, universe_ = strategies.policy_for(h), ev.panel(setup, h)
+        symbols = [c for c in universe_.closes.columns if c != sg.DATE]
+        tiers = [
+            (t, lt_costs.tier_costs(cfg, setup.snapshot, t, setup.spreads, symbols))
+            for t in cfg.base.capital_tiers
+        ]
+        for params in h.grid():
+            weights = strategies.strategy_for(h).build(market, params)
+            name = strategies.trial_name(h, params)
+            for tier, costs in tiers:
+                res = lt_costs.simulate(
+                    weights, universe_.closes, policy, costs, market.days_per_year
+                )
+                verdict = lt_costs.gate(res, h, cfg.longterm.costs)
+                rows.append(lt_costs.Row(name, tier.name, res, verdict))
+    return rows
 
 
 def _add_arguments(parser: argparse.ArgumentParser) -> None:
     sub = parser.add_subparsers(dest="cmd", required=True)
     run = sub.add_parser("run", help="verdict de la vague : gate, backtest, registre, critères")
     run.add_argument("--tier", default=None, help="palier de capital ; défaut : le premier")
-    run.add_argument("--hypotheses", type=Path, default=Path("hypotheses"))
-    run.add_argument("--exchange", default="binance", help="nom dans base.yaml")
+    costs = sub.add_parser("costs", help="gate de coûts de tous les paliers (sans backtest)")
+    for p in (run, costs):
+        p.add_argument("--hypotheses", type=Path, default=Path("hypotheses"))
+        p.add_argument("--exchange", default="binance", help="nom dans base.yaml")
 
 
-def _action(ctx: Context) -> int:
+def _prepare(ctx: Context, tier_name: str | None) -> tuple[ev.Setup, list[Hypothesis]]:
+    """Données, règles d'ordre et spreads communs aux deux commandes."""
     config = ctx.config
     snapshot = SnapshotStore(ctx.paths, config.base.exchange(ctx.args.exchange).name).latest()
     if snapshot is None:
         raise DataError("aucun snapshot exchangeInfo : lancer d'abord exchange_info fetch")
     fiches = [h for h in load_all(ctx.args.hypotheses) if h.volet == "longterm"]
-    ma_days = strategies.breadth_lengths(fiches)
-    market = strategies.load_market(ctx.paths, config, snapshot, ma_days, ctx.args.exchange)
-    bars = {s: klines.load(ctx.paths, universe.INTERVAL, s) for s in config.base.symbols.trade}
-    wanted = ctx.args.tier or config.base.capital_tiers[0].name
+    wanted = tier_name or config.base.capital_tiers[0].name
     tier = next((t for t in config.base.capital_tiers if t.name == wanted), None)
     if tier is None:
         raise DataError(f"palier inconnu : {wanted}")
+    quoted = any(h.universe == "trade_eur" for h in fiches)
+    market = strategies.load_market(
+        ctx.paths,
+        config,
+        snapshot,
+        strategies.breadth_lengths(fiches),
+        ctx.args.exchange,
+        quoted=quoted,
+    )
+    bars = {s: klines.load(ctx.paths, universe.INTERVAL, s) for s in config.base.symbols.trade}
     spreads = spread_medians(ctx.paths, config.longterm.costs.spread_min_samples)
-    rules = lt_backtest.pair_rules(config, snapshot, spreads)
-    setup = Setup(config, snapshot, market, sg.wide(bars, "open"), rules, tier, spreads)
-    body = run_wave(setup, fiches, TrialRegistry(ctx.paths.trials))
+    symbols = set(config.base.symbols.trade)
+    if market.quoted is not None:
+        symbols |= {c for c in market.quoted.closes.columns if c != sg.DATE}
+    rules = lt_backtest.pair_rules(config, snapshot, spreads, sorted(symbols))
+    return ev.Setup(config, snapshot, market, sg.wide(bars, "open"), rules, tier, spreads), fiches
+
+
+def _action(ctx: Context) -> int:
+    setup, fiches = _prepare(ctx, getattr(ctx.args, "tier", None))
     now = now_ms()
-    path = ctx.paths.reports / f"lt_wave_{date_str(now)}.md"
-    write_atomic(path, f"# Vague long terme — {date_str(now)}\n\n{body}".encode(), overwrite=True)
+    if ctx.args.cmd == "costs":
+        rows = cost_rows(setup, fiches)
+        measured = set(setup.config.base.symbols.trade) <= set(setup.spreads)
+        body = lt_costs.render(rows, setup.config.longterm.costs, spread_measured=measured)
+        title = (
+            f"# Gate de coûts long terme — {date_str(now)} (snapshot {setup.snapshot.path.name})"
+        )
+        path = ctx.paths.reports / f"lt_costs_{date_str(now)}.md"
+        print(body)
+    else:
+        body = run_wave(setup, fiches, TrialRegistry(ctx.paths.trials))
+        title = f"# Vague long terme — {date_str(now)}"
+        path = ctx.paths.reports / f"lt_wave_{date_str(now)}.md"
+    write_atomic(path, f"{title}\n\n{body}\n".encode(), overwrite=True)
     print(f"Rapport : {path}")
-    ctx.journal.info("lt_wave.run", {"tier": tier.name, "report": str(path)})
+    ctx.journal.info(f"lt_wave.{ctx.args.cmd}", {"tier": setup.tier.name, "report": str(path)})
     return 0
 
 
@@ -288,7 +183,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     return run_command(
         argv,
         prog="python -m qlab.longterm.lt_wave",
-        description="Verdict d'une vague de fiches long terme",
+        description="Gate de coûts et verdict d'une vague de fiches long terme",
         component="lt_wave",
         add_arguments=_add_arguments,
         action=_action,

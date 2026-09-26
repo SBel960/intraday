@@ -66,8 +66,14 @@ def _equal_sleeves(closes: pl.DataFrame, on: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-def equal_weight(closes: pl.DataFrame) -> pl.DataFrame:
-    """Référence : panier équipondéré des actifs présents chaque jour (1/N chacun)."""
+def equal_weight(closes: pl.DataFrame, members: pl.DataFrame | None = None) -> pl.DataFrame:
+    """Référence : panier équipondéré des actifs présents chaque jour (1/N chacun) ;
+    ``members`` (booléens, même grille) : seulement les membres de l'univers du jour."""
+    if members is not None:
+        closes = closes.with_columns(
+            pl.when(pl.lit(members[a].fill_null(False))).then(pl.col(a)).alias(a)
+            for a in _assets(closes)
+        )
     return _equal_sleeves(
         closes, closes.select(DATE, *(pl.lit(True).alias(a) for a in _assets(closes)))
     )

@@ -12,31 +12,35 @@ Une seule table pour le gate de coûts (``lt_costs``) et le backtest : chaque fi
 - Momentum transversal : la fiche le teste sur tout le marché (``research/ic.py``) et
   l'applique aux paires tradées ; c'est cette application qui est rejouée ici.
 
-Commande (gate LT officiel, rapport dans ``reports/``) :
-``python -m qlab.longterm.strategies --config config costs [--hypotheses hypotheses]``
+Commandes (gate de coûts de tous les paliers, verdict d'une vague) : ``longterm/lt_wave.py``.
 """
 
 from __future__ import annotations
 
-import argparse
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 
 import polars as pl
 
-from qlab.core.cli import Context, run_command
 from qlab.core.config import QlabConfig, SignalsConfig
 from qlab.core.errors import DataError
-from qlab.core.files import write_atomic
 from qlab.core.paths import DataPaths
-from qlab.core.timeutils import MS_PER_DAY, MS_PER_S, date_str, now_ms
-from qlab.exchange.snapshots import Snapshot, SnapshotStore
-from qlab.exchange.spreads import medians as spread_medians
-from qlab.longterm import funding, klines, lt_costs, market_state, universe
+from qlab.core.timeutils import MS_PER_DAY, MS_PER_S
+from qlab.exchange.snapshots import Snapshot
+from qlab.longterm import funding, klines, market_state, universe
 from qlab.longterm import signals as sg
 from qlab.longterm.allocation import Policy
-from qlab.research.hypothesis import Hypothesis, load_all
+from qlab.research.hypothesis import Hypothesis
+
+
+@dataclass(frozen=True, slots=True)
+class Panel:
+    """Un univers sur grille journalière : clôtures, ouvertures et, pour un univers qui change
+    (``trade_eur``), ``members`` (booléens, même grille : paire éligible ce jour-là)."""
+
+    closes: pl.DataFrame
+    opens: pl.DataFrame
+    members: pl.DataFrame | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +52,7 @@ class Market:
     days_per_year: int
     settings: SignalsConfig
     bases: Mapping[str, str]  # paire → actif de base (exchangeInfo)
+    quoted: Panel | None = None  # univers trade_eur (paires cotées dans la devise du compte)
 
 
 Params = Mapping[str, float]
@@ -120,6 +125,14 @@ def _near_high(m: Market, p: Params) -> pl.DataFrame:
     return sg.near_high(m.closes, p["min_ratio"], m.days_per_year)
 
 
+def _xs_momentum_eur(m: Market, p: Params) -> pl.DataFrame:
+    q = m.quoted
+    if q is None or q.members is None:
+        raise DataError("univers trade_eur non chargé (load_market(..., quoted=True))")
+    lookback, k = _days(p, "lookback_days"), _days(p, "top_k")
+    return sg.xs_momentum(q.closes, q.members, lookback, m.settings.xs_skip_days, k)
+
+
 @dataclass(frozen=True, slots=True)
 class Strategy:
     """``multi_asset`` : la fiche répartit entre plusieurs actifs (sur un seul, elle se réduit
@@ -142,6 +155,7 @@ REGISTRY: dict[str, Strategy] = {
     "lt_breakout": Strategy(_breakout),
     "lt_volume_shock": Strategy(_volume_shock, rebalance_days=1),  # le choc fixe l'entrée
     "lt_near_high": Strategy(_near_high),
+    "lt_xs_momentum_eur": Strategy(_xs_momentum_eur, multi_asset=True),
 }
 
 
@@ -168,8 +182,11 @@ def load_market(
     snapshot: Snapshot,
     ma_days: Sequence[int],
     exchange: str,
+    *,
+    quoted: bool = False,
 ) -> Market:
-    """Charge les données de toutes les fiches (largeur seulement pour ``ma_days``)."""
+    """Charge les données de toutes les fiches (largeur seulement pour ``ma_days`` ; univers
+    ``trade_eur`` seulement si ``quoted``)."""
     trade = config.base.symbols.trade
     bars = {s: klines.load(paths, universe.INTERVAL, s) for s in trade}
     closes, volumes = sg.wide(bars), sg.wide(bars, "volume_quote")
@@ -184,7 +201,27 @@ def load_market(
         state = market_state.market_state(paths, members, ma_days)
         breadth = {n: state.select("date_ms", breadth=f"breadth_{n}") for n in ma_days}
     days = config.base.exchange(exchange).trading_days_per_year
-    return Market(closes, volumes, mean_rate, breadth, days, config.longterm.signals, bases)
+    panel = quoted_panel(paths, config, known) if quoted else None
+    return Market(closes, volumes, mean_rate, breadth, days, config.longterm.signals, bases, panel)
+
+
+def quoted_panel(
+    paths: DataPaths, config: QlabConfig, known: Mapping[str, Mapping[str, object]]
+) -> Panel:
+    """Univers ``trade_eur`` : prix de toutes les paires membres un jour ou l'autre, et
+    matrice des membres jour par jour (``universe.quoted``)."""
+    cfg, quote = config.longterm.universe, config.base.symbols.quote_asset
+    members = universe.quoted(paths, known, cfg, quote).members
+    if members.is_empty():
+        raise DataError(f"univers {quote} vide : aucune paire assez liquide")
+    symbols = members["symbol"].unique().sort().to_list()
+    bars = {s: klines.load(paths, universe.INTERVAL, s) for s in symbols}
+    closes = sg.wide(bars)
+    flags = members.with_columns(member=pl.lit(value=True)).pivot(
+        on="symbol", index="date_ms", values="member"
+    )
+    grid = closes.select(sg.DATE).join(flags, on=sg.DATE, how="left").fill_null(value=False)
+    return Panel(closes, sg.wide(bars, "open"), grid.select(sg.DATE, *symbols))
 
 
 def breadth_lengths(hypotheses: Sequence[Hypothesis]) -> list[int]:
@@ -196,74 +233,3 @@ def breadth_lengths(hypotheses: Sequence[Hypothesis]) -> list[int]:
 
 def trial_name(hypothesis: Hypothesis, params: Params) -> str:
     return f"{hypothesis.id} · " + ", ".join(f"{k}={v:g}" for k, v in params.items())
-
-
-def cost_rows(
-    config: QlabConfig,
-    snapshot: Snapshot,
-    market: Market,
-    hypotheses: Sequence[Hypothesis],
-    spreads: Mapping[str, float],
-) -> list[lt_costs.Row]:
-    """Gate LT : chaque essai (fiche × paramètres) à chaque palier de capital ; ``spreads`` :
-    médianes mesurées (``exchange/spreads.py``), les autres paires gardent l'hypothèse."""
-    cfg = config.longterm.costs
-    tiers = [
-        (t, lt_costs.tier_costs(config, snapshot, t, spreads)) for t in config.base.capital_tiers
-    ]
-    rows = []
-    for h in hypotheses:
-        policy, strategy = policy_for(h), strategy_for(h)
-        for params in h.grid():
-            weights = strategy.build(market, params)
-            for tier, costs in tiers:
-                res = lt_costs.simulate(weights, market.closes, policy, costs, market.days_per_year)
-                rows.append(
-                    lt_costs.Row(trial_name(h, params), tier.name, res, lt_costs.gate(res, h, cfg))
-                )
-    return rows
-
-
-def _add_arguments(parser: argparse.ArgumentParser) -> None:
-    sub = parser.add_subparsers(dest="cmd", required=True)
-    costs = sub.add_parser("costs", help="gate de coûts LT de toutes les fiches long terme")
-    costs.add_argument("--hypotheses", type=Path, default=Path("hypotheses"))
-    costs.add_argument("--exchange", default="binance", help="nom dans base.yaml")
-
-
-def _action(ctx: Context) -> int:
-    config = ctx.config
-    snapshot = SnapshotStore(ctx.paths, config.base.exchange(ctx.args.exchange).name).latest()
-    if snapshot is None:
-        raise DataError("aucun snapshot exchangeInfo : lancer d'abord exchange_info fetch")
-    fiches = [h for h in load_all(ctx.args.hypotheses) if h.volet == "longterm"]
-    ma_days = breadth_lengths(fiches)
-    market = load_market(ctx.paths, config, snapshot, ma_days, ctx.args.exchange)
-    spreads = spread_medians(ctx.paths, config.longterm.costs.spread_min_samples)
-    rows = cost_rows(config, snapshot, market, fiches, spreads)
-    now = now_ms()
-    measured = set(config.base.symbols.trade) <= set(spreads)
-    body = lt_costs.render(rows, config.longterm.costs, spread_measured=measured)
-    report = ctx.paths.reports / f"lt_costs_{date_str(now)}.md"
-    title = f"# Gate de coûts long terme — {date_str(now)} (snapshot {snapshot.path.name})\n\n"
-    write_atomic(report, (title + body + "\n").encode("utf-8"), overwrite=True)
-    kept = sorted({r.trial for r in rows if r.verdict.passed})
-    print(body)
-    print(f"\nRapport : {report}")
-    ctx.journal.info("strategies.costs", {"trials": len(rows), "passed_somewhere": len(kept)})
-    return 0
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    return run_command(
-        argv,
-        prog="python -m qlab.longterm.strategies",
-        description="Stratégies long terme : gate de coûts des fiches",
-        component="strategies",
-        add_arguments=_add_arguments,
-        action=_action,
-    )
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

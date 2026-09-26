@@ -14,7 +14,7 @@ from qlab.core.config import load_config
 from qlab.core.paths import DataPaths
 from qlab.core.timeutils import MS_PER_DAY, date_to_ms
 from qlab.exchange.snapshots import SnapshotStore
-from qlab.longterm import funding, lt_backtest, lt_wave, strategies
+from qlab.longterm import funding, lt_backtest, lt_evaluate, lt_wave, strategies
 from qlab.longterm.signals import DATE
 from qlab.research.hypothesis import load_all
 from qlab.research.trials import TrialRegistry
@@ -32,7 +32,7 @@ def _prices(seed: int) -> dict[str, np.ndarray]:
     return {s: 100 * np.exp(np.cumsum(rng.normal(0.0003, 0.03, DAYS))) for s in TRADE}
 
 
-def _setup(config_dir: Path) -> lt_wave.Setup:
+def _setup(config_dir: Path) -> lt_evaluate.Setup:
     config = load_config(config_dir)
     paths = DataPaths(config_dir.parent / "data")
     SnapshotStore(paths, "binance").save(
@@ -47,13 +47,22 @@ def _setup(config_dir: Path) -> lt_wave.Setup:
     breadth = pl.DataFrame({DATE: dates, "breadth": rng.uniform(0, 1, DAYS)})
     volumes = closes.with_columns(pl.exclude(DATE) * 0 + 1e6)
     bases = {s: s.removesuffix("USDT") for s in TRADE}
+    members = closes.select(DATE, *(pl.lit(value=True).alias(s) for s in TRADE))
+    quoted = strategies.Panel(closes, closes, members)  # univers trade_eur : mêmes paires ici
     market = strategies.Market(
-        closes, volumes, fund, {50: breadth, 100: breadth}, 365, config.longterm.signals, bases
+        closes,
+        volumes,
+        fund,
+        {50: breadth, 100: breadth},
+        365,
+        config.longterm.signals,
+        bases,
+        quoted,
     )
     spreads = {"BTCUSDT": 0.0001}  # mesuré pour BTC seulement : les autres gardent l'hypothèse
     rules = lt_backtest.pair_rules(config, snapshot, spreads)
     tier = config.base.capital_tiers[1]
-    return lt_wave.Setup(config, snapshot, market, closes, rules, tier, spreads)
+    return lt_evaluate.Setup(config, snapshot, market, closes, rules, tier, spreads)
 
 
 def test_wave_records_every_backtested_trial_before_judging(
@@ -65,7 +74,7 @@ def test_wave_records_every_backtested_trial_before_judging(
     registry = TrialRegistry(tmp_path / "trials.jsonl")
     body = lt_wave.run_wave(_setup(config_dir), FICHES, registry)
     gate_lines = [line for line in body.splitlines() if line.startswith("- lt_")]
-    assert len(gate_lines) == 25  # vagues 1 et 2 (hors lt_xs_momentum_eur)
+    assert len(gate_lines) == 27  # vagues 1 et 2
     kept = [line for line in gate_lines if " : testée (" in line]
     assert kept and registry.n_trials("longterm") == len(kept)
     assert f"N = {len(kept)} essais dans le volet" in body
@@ -129,18 +138,12 @@ def test_cli(config_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert report.startswith("# Vague long terme") and "Gate de coûts au palier t1" in report
     assert TrialRegistry(paths.trials).n_trials("longterm") > 0
     assert "Rapport :" in capsys.readouterr().out
-
-
-def test_never_invested_trial_counts_with_zero_sharpe() -> None:
-    """Rendements tous nuls (jamais investi) : Sharpe 0 par convention, l'essai compte dans N."""
-    r = lt_wave._result(np.zeros(10), 365)
-    assert (r.sharpe, r.n_obs, r.skew, r.kurtosis) == (0.0, 10, 0.0, 3.0)
-    assert lt_wave._result(np.array([0.01, -0.02, 0.03]), 365).sharpe != 0
-
-
-def test_first_decision_skips_the_warm_up() -> None:
-    """Cash les jours 0 à 2 (signal pas encore défini), investi dès le jour 3 ; jamais
-    investi ⇒ toute la période (évalué à plat, Sharpe 0 au registre)."""
-    w = pl.DataFrame({DATE: [T0 + i * D for i in range(5)], "A": [0.0, 0.0, 0.0, 0.5, 0.0]})
-    assert lt_wave.first_decision(w) == 3
-    assert lt_wave.first_decision(w.with_columns(A=pl.lit(0.0))) == 0
+    # Gate de coûts de tous les paliers : aucun backtest, rien d'enregistré
+    trials_before = len(TrialRegistry(paths.trials).trials())
+    costs = ["--config", str(config_dir), "costs", "--hypotheses", str(HYPOTHESES)]
+    assert lt_wave.main(costs) == 0
+    table = next(paths.reports.glob("lt_costs_*.md")).read_text()
+    assert table.startswith("# Gate de coûts long terme")
+    assert table.count("| lt_") == 27 * 2  # 27 essais × 2 paliers (config de test)
+    assert "lt_xs_momentum_eur · lookback_days=90, top_k=3 | t1 |" in table
+    assert len(TrialRegistry(paths.trials).trials()) == trials_before

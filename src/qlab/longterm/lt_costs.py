@@ -32,9 +32,8 @@ import polars as pl
 
 from qlab.core.config import CapitalTier, LtCostsConfig, QlabConfig
 from qlab.core.errors import DataError
-from qlab.exchange import effective_params
 from qlab.exchange.snapshots import Snapshot
-from qlab.longterm import allocation
+from qlab.longterm import allocation, lt_backtest
 from qlab.longterm.signals import DATE
 from qlab.research.hypothesis import Hypothesis
 
@@ -53,22 +52,20 @@ def tier_costs(
     snapshot: Snapshot,
     tier: CapitalTier,
     spreads: Mapping[str, float],
+    symbols: Sequence[str] | None = None,
 ) -> dict[str, AssetCost]:
-    """Coûts des paires tradées au capital ``tier`` : frais réels et δ_min du snapshot
-    (``effective_params``), spread mesuré si fourni, sinon ``fallback_spread_frac``."""
-    cfg = config.longterm.costs
+    """Coûts de ``symbols`` (défaut : paires tradées) au capital ``tier`` : coût d'un ordre
+    = frais + impact de ``lt_backtest.pair_rules`` ; δ_min = minNotional / capital."""
     capital = Decimal(str(tier.capital_quote))
-    params = effective_params.compute(
-        config, snapshot, at_ms=snapshot.fetched_ms, net_deposits_quote=capital
-    )
-    out = {}
-    for pair in params.pairs:
-        spread = spreads.get(pair.symbol, cfg.fallback_spread_frac)
-        cost = float(pair.fee_taker_frac) + spread / 2 + cfg.slippage_frac
-        out[pair.symbol] = AssetCost(
-            cost + cfg.eur_conversion_cost_frac, float(pair.delta_min_frac), pair.symbol in spreads
+    rules = lt_backtest.pair_rules(config, snapshot, spreads, symbols)
+    return {
+        s: AssetCost(
+            float(r.fee_frac + r.impact_frac),
+            float(r.filters.min_notional / capital),
+            s in spreads,
         )
-    return out
+        for s, r in rules.items()
+    }
 
 
 @dataclass(frozen=True, slots=True)

@@ -24,7 +24,7 @@ détenir : un moteur sain doit le récompenser largement (contrôle anti-fuite d
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 
@@ -51,12 +51,17 @@ class PairRules:
 
 
 def pair_rules(
-    config: QlabConfig, snapshot: Snapshot, spreads: Mapping[str, float]
+    config: QlabConfig,
+    snapshot: Snapshot,
+    spreads: Mapping[str, float],
+    symbols: Sequence[str] | None = None,
 ) -> dict[str, PairRules]:
-    """Règles des paires tradées d'après le snapshot (filtres, frais réels) et la config."""
+    """Règles d'ordre de ``symbols`` (défaut : paires tradées) : filtres et frais réels du
+    snapshot, impact = ½ spread (mesuré, sinon hypothèse de la config) + slippage +
+    conversion. Seule source du coût d'un ordre (le gate de coûts s'en sert aussi)."""
     cfg = config.longterm.costs
     out = {}
-    for symbol in config.base.symbols.trade:
+    for symbol in config.base.symbols.trade if symbols is None else symbols:
         spread = spreads.get(symbol, cfg.fallback_spread_frac)
         impact = spread / 2 + cfg.slippage_frac + cfg.eur_conversion_cost_frac
         fees = pair_fees(snapshot.fees, symbol)
