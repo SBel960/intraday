@@ -37,3 +37,4 @@ costs:
   slippage_frac: 0.0005
   eur_conversion_cost_frac: 0.0      # devise de cotation EUR : aucune conversion
   max_drag_edge_fraction: 0.5        # drag > 50 % de l'edge visé ⇒ stratégie non testée
+  max_rejected_share: 0.5            # > 50 % du VOLUME voulu sous minNotional ⇒ non réalisable à ce palier (2026-09-26)

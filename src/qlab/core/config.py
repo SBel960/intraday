@@ -491,12 +491,14 @@ class LtCostsConfig:
     slippage_frac: float
     eur_conversion_cost_frac: float
     max_drag_edge_fraction: float
+    max_rejected_share: float
 
     def __post_init__(self) -> None:
         _positive("fallback_spread_frac", self.fallback_spread_frac)
         _non_negative("slippage_frac", self.slippage_frac)
         _non_negative("eur_conversion_cost_frac", self.eur_conversion_cost_frac)
         _fraction("max_drag_edge_fraction", self.max_drag_edge_fraction)
+        _fraction("max_rejected_share", self.max_rejected_share)
 
 
 @dataclass(frozen=True, slots=True)

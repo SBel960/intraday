@@ -75,6 +75,7 @@ def test_minnotional_rejections_are_counted() -> None:
     costs = {"A": lc.AssetCost(0.01, 0.1, False)}
     res = lc.simulate(_grid(A=[0.5, 0.55]), _grid(A=[1.0, 1.0]), DAILY, costs, periods_per_year=2)
     assert (res.orders, res.rejected, res.rejected_share) == (1, 1, 0.5)
+    assert res.rejected_volume_share == pytest.approx(0.05 / 0.55)  # 5 % rejeté, 50 % exécuté
 
 
 def test_missing_price_keeps_value() -> None:
@@ -89,29 +90,43 @@ def test_missing_price_keeps_value() -> None:
     assert res.turnover_annual == pytest.approx(1.0)
 
 
-def test_gate_against_frozen_fiches() -> None:
+def test_gate_against_frozen_fiches(config_dir: Path) -> None:
     """``lt_ts_momentum`` : edge 3 %/an ; drag 1,5 %/an = 50 % ⇒ testée (seuil 50 %).
     ``lt_short_reversal`` : edge 0,4 %/trade ; aller-retour 2 × 0,4 % = 200 % ⇒ non testée."""
+    cfg = load_config(config_dir).longterm.costs  # coûts ≤ 50 % de l'edge, rejets ≤ 50 %
     per_year = load_hypothesis(FICHES / "lt_ts_momentum.yaml")
     per_trade = load_hypothesis(FICHES / "lt_short_reversal.yaml")
-    res = lc.CostResult(1.0, 5.0, 0.015, 10, 0, 0.004)
-    ok = lc.gate(res, per_year, 0.5)
+    res = lc.CostResult(1.0, 5.0, 0.015, 10, 0, 0.004, 0.0)
+    ok = lc.gate(res, per_year, cfg)
     assert ok.passed and ok.ratio == pytest.approx(0.5)
-    bad = lc.gate(res, per_trade, 0.5)
+    bad = lc.gate(res, per_trade, cfg)
     assert not bad.passed and bad.ratio == pytest.approx(2.0)
-    assert "aller-retour 0.80%" in bad.detail
+    assert "aller-retour 0.80%" in bad.detail and bad.label == "**non testée**"
+
+
+def test_too_many_rejections_make_a_trial_unfeasible(config_dir: Path) -> None:
+    """Coûts faibles (drag 0,3 % pour 3 % d'edge) mais 1,5 de turnover voulu rejeté pour 1,0
+    exécuté : 60 % du volume > 50 % ⇒ non réalisable à ce palier, même si les coûts passent.
+    En nombre d'ordres (6 sur 10), seul le volume compte : 0,5 rejeté pour 1,0 exécuté ⇒ 33 %."""
+    cfg = load_config(config_dir).longterm.costs
+    fiche = load_hypothesis(FICHES / "lt_ts_momentum.yaml")
+    v = lc.gate(lc.CostResult(1.0, 1.0, 0.003, 4, 6, 0.003, 1.5), fiche, cfg)
+    assert (v.feasible, v.passed, v.label) == (False, False, "**non réalisable**")
+    assert "60% du volume rejeté" in v.detail
+    assert lc.gate(lc.CostResult(1.0, 1.0, 0.003, 5, 5, 0.003, 1.0), fiche, cfg).passed  # 50 %
+    assert lc.gate(lc.CostResult(1.0, 1.0, 0.003, 4, 6, 0.003, 0.5), fiche, cfg).passed
 
 
 def test_render(config_dir: Path) -> None:
     cfg = load_config(config_dir).longterm.costs
-    res = lc.CostResult(1.0, 5.0, 0.015, 10, 2, 0.004)
+    res = lc.CostResult(1.0, 5.0, 0.015, 10, 2, 0.004, 1.0)
     row = lc.Row("lt_ts_momentum · lookback_days=90", "t0", res, lc.Verdict(True, 0.5, ""))
     text = lc.render([row], cfg, spread_measured=False)
     assert (
-        "| lt_ts_momentum · lookback_days=90 | t0 | 5.0 | 1.50% | 10 | 2 (17%) | 50% | testée |"
-        in text
+        "| lt_ts_momentum · lookback_days=90 | t0 | 5.0 | 1.50% | 10 | "
+        "2 (17% des ordres, 17% du volume) | 50% | testée |" in text
     )
-    assert "spread supposé 0.10%" in text
+    assert "spread supposé 0.10%" in text and "ordres rejetés ≤ 50% du volume voulu" in text
 
 
 @pytest.mark.parametrize(

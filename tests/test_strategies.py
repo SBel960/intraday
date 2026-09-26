@@ -49,8 +49,8 @@ def test_policies_follow_fiche_horizons() -> None:
 
 
 def test_trial_name_and_integer_days() -> None:
-    assert st.trial_name(_fiche("lt_xs_momentum"), {"lookback_days": 30.0, "top_k": 3.0}) == (
-        "lt_xs_momentum · lookback_days=30, top_k=3"
+    assert st.trial_name(_fiche("lt_xs_momentum"), {"lookback_days": 30.0, "top_k": 1.0}) == (
+        "lt_xs_momentum · lookback_days=30, top_k=1"
     )
     with pytest.raises(DataError, match="entier"):
         st._days({"lookback_days": 1.5}, "lookback_days")
@@ -69,7 +69,7 @@ def _market(days: int = 420) -> st.Market:
 
 
 def test_every_trial_builds_valid_weights() -> None:
-    """Les 19 essais de la vague 1 : même grille que les prix, poids ≥ 0, somme ≤ 1."""
+    """Les 17 essais de la vague 1 : même grille que les prix, poids ≥ 0, somme ≤ 1."""
     market, n = _market(), 0
     for h in FICHES:
         for params in h.grid():
@@ -78,7 +78,7 @@ def test_every_trial_builds_valid_weights() -> None:
             x = w.drop(DATE).to_numpy()
             assert (x >= 0).all() and (x.sum(axis=1) <= 1 + 1e-12).all(), st.trial_name(h, params)
             n += 1
-    assert n == 19
+    assert n == 17
 
 
 def _write_klines(paths: DataPaths, symbol: str, closes: np.ndarray, volume: float) -> None:
@@ -117,6 +117,6 @@ def test_costs_command_end_to_end(config_dir: Path, capsys: pytest.CaptureFixtur
     out = capsys.readouterr().out
     report = next((paths.reports).glob("lt_costs_*.md")).read_text()
     assert report.startswith("# Gate de coûts long terme")
-    assert report.count("| lt_") == 19 * 2  # 19 essais × 2 paliers (config de test)
+    assert report.count("| lt_") == 17 * 2  # 17 essais × 2 paliers (config de test)
     assert "lt_market_breadth · ma_days=100, min_breadth=0.5 | t1 |" in report
     assert "Rapport :" in out

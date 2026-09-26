@@ -94,6 +94,7 @@ LONGTERM: dict[str, object] = {
         "slippage_frac": 0.0005,
         "eur_conversion_cost_frac": 0.002,
         "max_drag_edge_fraction": 0.5,
+        "max_rejected_share": 0.5,
     },
 }
 

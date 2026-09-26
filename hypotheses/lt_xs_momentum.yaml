@@ -14,7 +14,8 @@ parameters:
   - name: lookback_days             # classement sur ln(C_{t-7} / C_{t-L}), 7 derniers jours sautés
     values: [30, 90]
   - name: top_k                     # nombre d'actifs détenus, poids égaux
-    values: [1, 3]
+    values: [1]                     # 3 retiré le 2026-09-26 avant tout test : avec 3 paires tradées,
+                                    # « les 3 meilleures » = le panier équipondéré (la référence)
 cost_round_trip_frac: 0.003
 min_edge_frac: 0.03
 edge_basis: per_year

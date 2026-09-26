@@ -292,6 +292,7 @@ def test_intraday_domain(config_dir: Path, keys: list[str | int], value: Any, ms
         (["dca", "amount_quote"], 0, "amount_quote"),
         (["costs", "fallback_spread_frac"], 0, "fallback_spread_frac"),
         (["costs", "max_drag_edge_fraction"], 0, "max_drag_edge_fraction"),
+        (["costs", "max_rejected_share"], 0, "max_rejected_share"),
         (["universe", "warmup_days"], -1, "warmup_days"),
         (["universe", "reference_quotes"], [], "reference_quotes"),
         (["universe", "excluded_bases"], ["EUR", "EUR"], "excluded_bases"),

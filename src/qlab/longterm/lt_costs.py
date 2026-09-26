@@ -9,7 +9,12 @@ de performance** (le gate ne doit rien révéler du résultat). On mesure, à un
    (+ conversion de devise), spread mesuré sinon hypothèse prudente de la config (signalée) ;
 3. ordres rejetés par ``minNotional`` : échanges voulus sous δ_min = minNotional / V ;
 4. rapport au seuil de la fiche : drag / edge minimal (``per_year``) ou coût d'un aller-retour
-   moyen / edge minimal (``per_trade``). Au-delà de ``max_drag_edge_fraction`` : **non testée**.
+   moyen / edge minimal (``per_trade``). Au-delà de ``max_drag_edge_fraction`` : **non testée** ;
+5. plus de ``max_rejected_share`` du **volume** voulu (Σ|Δw|) rejeté : **non réalisable** à ce
+   palier (à petit capital, les rejets font baisser le turnover mesuré : sans cette règle, le
+   verdict serait flatteur). En volume et non en nombre d'ordres : les nombreuses petites
+   corrections de dérive rejetées pèsent peu (mesuré le 2026-09-26 : 79 % des ordres mais 25 %
+   du volume pour ts_momentum à 50 €).
 
 Simplification assumée (écrite dans le rapport) : V reste égal au capital du palier pour δ_min
 (le gate est un filtre préalable ; le backtest suit la vraie valeur). Un actif sans prix un jour
@@ -74,11 +79,19 @@ class CostResult:
     orders: int
     rejected: int
     mean_cost_frac: float  # coût moyen d'un aller simple, pondéré par le volume échangé
+    rejected_turnover_annual: float  # Σ |Δw| voulu mais rejeté (minNotional), par an
 
     @property
     def rejected_share(self) -> float:
+        """Part des ordres voulus rejetés (en nombre, pour information)."""
         wanted = self.orders + self.rejected
         return self.rejected / wanted if wanted else 0.0
+
+    @property
+    def rejected_volume_share(self) -> float:
+        """Part du volume voulu rejeté : critère de réalisabilité."""
+        wanted = self.turnover_annual + self.rejected_turnover_annual
+        return self.rejected_turnover_annual / wanted if wanted else 0.0
 
 
 def simulate(
@@ -102,7 +115,7 @@ def simulate(
     dates = weights[DATE].to_list()
     delta_min = {a: costs[a].delta_min for a in assets}
     held: dict[str, float] = {}
-    traded = cost = 0.0
+    traded = cost = refused = 0.0
     orders = rejected = 0
     for t, day in enumerate(dates):
         target = {a: float(x) for a, x in zip(assets, w_target[t], strict=True) if x > 0}
@@ -117,13 +130,20 @@ def simulate(
         held = allocation.apply(held, decision)
         orders, rejected = orders + len(decision.trades), rejected + len(decision.skipped)
         traded += decision.turnover
+        refused += sum(abs(x.delta_w) for x in decision.skipped)
         cost += sum(abs(x.delta_w) * costs[x.asset].cost_frac for x in decision.trades)
         if t + 1 < len(dates) and held:
             r = dict(zip(assets, returns[t], strict=True))
             held = allocation.drift(held, {a: r[a] for a in held})
     years = len(dates) / periods_per_year
     return CostResult(
-        years, traded / years, cost / years, orders, rejected, cost / traded if traded else 0.0
+        years,
+        traded / years,
+        cost / years,
+        orders,
+        rejected,
+        cost / traded if traded else 0.0,
+        refused / years,
     )
 
 
@@ -132,20 +152,33 @@ class Verdict:
     passed: bool
     ratio: float  # part de l'edge minimal consommée par les coûts
     detail: str
+    feasible: bool = True  # faux : trop d'ordres rejetés par minNotional à ce palier
+
+    @property
+    def label(self) -> str:
+        if not self.feasible:
+            return "**non réalisable**"
+        return "testée" if self.passed else "**non testée**"
 
 
-def gate(result: CostResult, hypothesis: Hypothesis, max_fraction: float) -> Verdict:
-    """Compare les coûts à l'edge minimal de la fiche (base annuelle ou par trade)."""
+def gate(result: CostResult, hypothesis: Hypothesis, cfg: LtCostsConfig) -> Verdict:
+    """Coûts comparés à l'edge minimal de la fiche (base annuelle ou par trade), puis part
+    d'ordres rejetés par ``minNotional``."""
     edge = hypothesis.min_edge_frac
     if hypothesis.edge_basis == "per_year":
         ratio = result.drag_annual / edge
         detail = f"drag {result.drag_annual:.2%}/an pour un edge visé de {edge:.2%}/an"
     else:
-        ratio = 2 * result.mean_cost_frac / edge
-        detail = (
-            f"aller-retour {2 * result.mean_cost_frac:.2%} pour un edge visé de {edge:.2%}/trade"
-        )
-    return Verdict(ratio <= max_fraction, ratio, f"{detail} ({ratio:.0%} consommé)")
+        trip = 2 * result.mean_cost_frac
+        ratio = trip / edge
+        detail = f"aller-retour {trip:.2%} pour un edge visé de {edge:.2%}/trade"
+    feasible = result.rejected_volume_share <= cfg.max_rejected_share
+    return Verdict(
+        feasible and ratio <= cfg.max_drag_edge_fraction,
+        ratio,
+        f"{detail} ({ratio:.0%} consommé), {result.rejected_volume_share:.0%} du volume rejeté",
+        feasible,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,8 +202,9 @@ def render(rows: Sequence[Row], cfg: LtCostsConfig, spread_measured: bool) -> st
         res, v = r.result, r.verdict
         lines.append(
             f"| {r.trial} | {r.tier} | {res.turnover_annual:.1f} | {res.drag_annual:.2%} | "
-            f"{res.orders} | {res.rejected} ({res.rejected_share:.0%}) | {v.ratio:.0%} | "
-            f"{'testée' if v.passed else '**non testée**'} |"
+            f"{res.orders} | {res.rejected} ({res.rejected_share:.0%} des ordres, "
+            f"{res.rejected_volume_share:.0%} du volume) | {v.ratio:.0%} | "
+            f"{v.label} |"
         )
     spread = (
         "spreads mesurés"
@@ -181,7 +215,8 @@ def render(rows: Sequence[Row], cfg: LtCostsConfig, spread_measured: bool) -> st
         [
             *lines,
             "",
-            f"Seuil : coûts ≤ {cfg.max_drag_edge_fraction:.0%} de l'edge visé. {spread} ; "
+            f"Seuils : coûts ≤ {cfg.max_drag_edge_fraction:.0%} de l'edge visé, ordres rejetés "
+            f"≤ {cfg.max_rejected_share:.0%} du volume voulu. {spread} ; "
             f"slippage {cfg.slippage_frac:.2%}. δ_min calculé au capital du palier (V constant).",
         ]
     )

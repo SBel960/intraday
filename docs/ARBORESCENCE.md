@@ -198,7 +198,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 27 | 1 · Gate | `costs/gate_run.py` | validé |
 | — | 1 · Gate | **Cost gate v1 sur données réelles** : book_ticker Tardis (1er de chaque mois) des paires tradées, frais réels du compte (le §5 n'utilise pas les aggTrades) | **fait le 2026-09-26 : aucun horizon ≤ 15 min ne passe** (BTCEUR, ETHEUR, SOLEUR) |
 | 28 | 2 · Recherche | `research/hypothesis.py` (+ `hypotheses/_template.yaml`) | validé |
-| 29 | 2 · Recherche | `hypotheses/lt_*.yaml` : 7 fiches de la vague 1, écrites avant tout test (19 essais) | validé (figées) |
+| 29 | 2 · Recherche | `hypotheses/lt_*.yaml` : 7 fiches de la vague 1, écrites avant tout test (17 essais ; `lt_xs_momentum` révisée le 2026-09-26 avant tout test : top_k=3 retiré, dégénéré) | validé (figées) |
 | 30 | 2 · Recherche | `research/trials.py` | validé |
 | 31 | 2 · Recherche | `research/stats.py` | validé |
 | 32 | 2 · Recherche | `research/bootstrap.py` | validé |
@@ -211,7 +211,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 38 bis | 3 · Long terme | `longterm/funding.py` (+ `core/paths.py` : `lt_futures`) | validé |
 | 39 | 3 · Long terme | `longterm/signals.py` | validé |
 | 40 | 3 · Long terme | `longterm/allocation.py` | validé |
-| 41 | 3 · Long terme | `longterm/lt_costs.py` | validé |
+| 41 | 3 · Long terme | `longterm/lt_costs.py` (règle des rejets : non réalisable au-delà de `max_rejected_share` du volume voulu) | validé |
 | 41 bis | 3 · Long terme | `longterm/strategies.py` (+ `core/config.py` : `trading_days_per_year`) | validé |
 | 42 | 3 · Long terme | `sizing/sizing.py` | à faire |
 | 43 | 3 · Long terme | `longterm/lt_backtest.py` | à faire |
@@ -324,8 +324,8 @@ Réutiliser la connexion **ralentit** chaque requête d'environ 400 ms sur ce se
 
 Tester beaucoup d'hypothèses d'un coup rend le Deflated Sharpe impossible à passer (il faut battre le meilleur résultat obtenu par hasard parmi tous les essais) : on avance par vagues, la suivante seulement après le verdict de la précédente. Un seul compteur d'essais pour tout le volet long terme (`research/trials.py`) ; les essais très corrélés sont regroupés pour ne pas pénaliser à tort.
 
-- **Vague 1 (7 fiches, 19 essais)** : momentum temporel (3), momentum transversal (4), faible volatilité (2), retour à la moyenne court terme (2), excès de levier / financement (2), filtre de largeur du marché (4), saisonnalité de fin / début de mois (2).
-- **Vague 2** : rotation BTC → altcoins, cassure de volatilité, choc de volume, proximité du plus haut sur 1 an.
+- **Vague 1 (7 fiches, 17 essais)** : momentum temporel (3), momentum transversal (2 ; k=3 retiré avant tout test : avec 3 paires tradées, c'est le panier de référence), faible volatilité (2), retour à la moyenne court terme (2), excès de levier / financement (2), filtre de largeur du marché (4), saisonnalité de fin / début de mois (2).
+- **Vague 2** : rotation BTC → altcoins, cassure de volatilité, choc de volume, proximité du plus haut sur 1 an ; momentum transversal appliqué à un univers tradé plus large (paires EUR liquides).
 - **Plus tard** : nouvelles cotations (trop risqué à 50 €), excès de levier par positions ouvertes (historique trop court), offre de stablecoins et événements (sources à ajouter).
 
 **Liens entre hypothèses — rôles, pas concurrence** : ① état du marché (faut-il être investi ?) → ② sélection des actifs → ③ timing par actif → ④ taille (volatilité cible, sans levier) → ⑤ contraintes (minNotional, bandes, frais). Chaque brique est testée seule contre le buy & hold et le DCA, après frais réels ; seules les survivantes sont combinées, et la combinaison est une nouvelle fiche dont les essais s'ajoutent au compteur. Validation finale sur une période jamais touchée, puis paper trading.

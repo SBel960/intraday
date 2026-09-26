@@ -30,14 +30,12 @@ from qlab.core.config import QlabConfig, SignalsConfig
 from qlab.core.errors import DataError
 from qlab.core.files import write_atomic
 from qlab.core.paths import DataPaths
-from qlab.core.timeutils import MS_PER_DAY, date_str, now_ms
+from qlab.core.timeutils import MS_PER_DAY, MS_PER_S, date_str, now_ms
 from qlab.exchange.snapshots import Snapshot, SnapshotStore
 from qlab.longterm import funding, klines, lt_costs, market_state, universe
 from qlab.longterm import signals as sg
 from qlab.longterm.allocation import Policy
 from qlab.research.hypothesis import Hypothesis, load_all
-
-MS_PER_S = 1000
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,7 +122,11 @@ def strategy_for(hypothesis: Hypothesis) -> Strategy:
 
 
 def load_market(
-    paths: DataPaths, config: QlabConfig, snapshot: Snapshot, ma_days: Sequence[int]
+    paths: DataPaths,
+    config: QlabConfig,
+    snapshot: Snapshot,
+    ma_days: Sequence[int],
+    exchange: str,
 ) -> Market:
     """Charge les données de toutes les fiches (largeur seulement pour ``ma_days``)."""
     trade = config.base.symbols.trade
@@ -138,7 +140,7 @@ def load_market(
         members = universe.observed(paths, known, config.longterm.universe).members
         state = market_state.market_state(paths, members, ma_days)
         breadth = {n: state.select("date_ms", breadth=f"breadth_{n}") for n in ma_days}
-    days = config.base.exchanges[0].trading_days_per_year
+    days = config.base.exchange(exchange).trading_days_per_year
     return Market(closes, mean_rate, breadth, days, config.longterm.signals)
 
 
@@ -150,7 +152,7 @@ def cost_rows(
     config: QlabConfig, snapshot: Snapshot, market: Market, hypotheses: Sequence[Hypothesis]
 ) -> list[lt_costs.Row]:
     """Gate LT : chaque essai (fiche × paramètres) à chaque palier de capital."""
-    limit = config.longterm.costs.max_drag_edge_fraction
+    cfg = config.longterm.costs
     tiers = [(t, lt_costs.tier_costs(config, snapshot, t, {})) for t in config.base.capital_tiers]
     rows = []
     for h in hypotheses:
@@ -160,9 +162,7 @@ def cost_rows(
             for tier, costs in tiers:
                 res = lt_costs.simulate(weights, market.closes, policy, costs, market.days_per_year)
                 rows.append(
-                    lt_costs.Row(
-                        trial_name(h, params), tier.name, res, lt_costs.gate(res, h, limit)
-                    )
+                    lt_costs.Row(trial_name(h, params), tier.name, res, lt_costs.gate(res, h, cfg))
                 )
     return rows
 
@@ -183,7 +183,7 @@ def _action(ctx: Context) -> int:
     ma_days = sorted(
         {int(v) for h in fiches for p in h.parameters if p.name == "ma_days" for v in p.values}
     )
-    market = load_market(ctx.paths, config, snapshot, ma_days)
+    market = load_market(ctx.paths, config, snapshot, ma_days, ctx.args.exchange)
     rows = cost_rows(config, snapshot, market, fiches)
     now = now_ms()
     body = lt_costs.render(rows, config.longterm.costs, spread_measured=False)
