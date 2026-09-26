@@ -1,0 +1,22 @@
+id: lt_btc_alt_rotation
+title: Rotation BTC → altcoins (suivre la force relative)
+volet: longterm
+created: "2026-09-26"
+mechanism: >-
+  Les capitaux entrent d'abord dans BTC puis se déversent vers les altcoins quand l'appétit pour
+  le risque monte (« saison des altcoins »), et reviennent vers BTC dans les phases de peur. Être
+  sur ETH et SOL quand ils battent BTC depuis plusieurs semaines, sinon sur BTC seul, capte ces
+  cycles de flux lents que les particuliers suivent avec retard.
+horizon_s: 604800                   # réévaluation chaque semaine
+universe: trade                     # BTCEUR contre ETHEUR + SOLEUR
+features: [close_1d]
+parameters:
+  - name: lookback_days             # alts si ln(panier alts / BTC) sur L jours > 0, sinon BTC
+    values: [30, 90]
+cost_round_trip_frac: 0.004
+min_edge_frac: 0.03
+edge_basis: per_year
+abandon: >-
+  Abandon si DSR < 0,95, ou si l'écart de Sharpe avec le panier équipondéré n'a pas un intervalle
+  de confiance à 95 % strictement positif, ou si le résultat ne tient pas sur 3 années dont une
+  baissière.

@@ -32,7 +32,9 @@ from qlab.core.timeutils import date_to_ms
 from qlab.core.yamlschema import SchemaError, build, read_yaml
 
 VOLETS = ("longterm", "intraday")
-UNIVERSES = ("trade", "observe")
+# trade : paires tradées (config) ; observe : tout le marché (univers observé) ;
+# trade_eur : paires EUR liquides point-in-time (momentum transversal appliqué, vague 2).
+UNIVERSES = ("trade", "observe", "trade_eur")
 EDGE_BASES = ("per_trade", "per_year")
 MIN_MECHANISM_CHARS = 40  # une vraie phrase, pas un mot-clé
 _ID_RE = re.compile(r"^[a-z0-9_]+$")

@@ -13,7 +13,7 @@ mechanism: >-
   Décrire en une ou deux phrases le mécanisme économique supposé, pas seulement la règle.
 
 horizon_s: 2592000                  # détention typique en secondes (30 jours = 2 592 000)
-universe: trade                     # trade (paires tradées) | observe (tout le marché)
+universe: trade                     # trade (paires tradées) | observe (tout le marché) | trade_eur (paires EUR liquides)
 features: [close_1d]                # données utilisées
 
 # Grille des paramètres candidats : CHAQUE combinaison essayée est un essai compté pour le

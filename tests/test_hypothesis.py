@@ -75,6 +75,7 @@ def test_template_and_repo_fiches_are_valid() -> None:
         ({"mechanism": "momentum"}, "expliquer le mécanisme"),
         ({"horizon_s": 0}, "horizon_s"),
         ({"universe": "all"}, "universe"),
+        ({"universe": "eur"}, "universe"),
         ({"features": []}, "features"),
         ({"parameters": [{"name": "a", "values": []}]}, "au moins une valeur"),
         ({"parameters": [{"name": "a", "values": [1, 1]}]}, "en double"),

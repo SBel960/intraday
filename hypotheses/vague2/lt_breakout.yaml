@@ -1,0 +1,21 @@
+id: lt_breakout
+title: Cassure du plus haut récent (canal de Donchian)
+volet: longterm
+created: "2026-09-26"
+mechanism: >-
+  Un prix qui dépasse son plus haut des dernières semaines déclenche les ordres des suiveurs de
+  tendance et les rachats des vendeurs à découvert : la cassure s'auto-alimente. Sortir quand le
+  prix repasse sous le plus bas d'une fenêtre deux fois plus courte coupe les faux départs sans
+  quitter les longues tendances (règle des « Turtles », documentée sur les matières premières).
+horizon_s: 604800
+universe: trade                     # chaque paire tradée, poche de 1/N
+features: [close_1d]
+parameters:
+  - name: entry_days                # entrée : clôture > plus haut des L jours précédents
+    values: [20, 55]                # sortie : clôture < plus bas des L/2 jours précédents
+cost_round_trip_frac: 0.004
+min_edge_frac: 0.03
+edge_basis: per_year
+abandon: >-
+  Abandon si DSR < 0,95, ou si l'écart de Sharpe avec le buy & hold n'a pas un intervalle de
+  confiance à 95 % strictement positif, ou s'il ne réduit pas le drawdown maximal.
