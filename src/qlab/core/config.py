@@ -533,6 +533,23 @@ class AcceptanceConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class LtRiskConfig:
+    """Limites du volet long terme (``live/risk.py``) : enveloppe de ce que la stratégie a
+    vécu en backtest, avec une marge. La dépasser = elle ne se comporte plus comme testée."""
+
+    max_open_positions: int
+    max_day_loss_frac: float
+    max_drawdown_frac: float
+    max_bar_age_hours: int
+
+    def __post_init__(self) -> None:
+        _positive("max_open_positions", self.max_open_positions)
+        _fraction("max_day_loss_frac", self.max_day_loss_frac)
+        _fraction("max_drawdown_frac", self.max_drawdown_frac)
+        _positive("max_bar_age_hours", self.max_bar_age_hours)
+
+
+@dataclass(frozen=True, slots=True)
 class LongtermConfig:
     universe: UniverseConfig
     signals: SignalsConfig
@@ -541,6 +558,7 @@ class LongtermConfig:
     dca: DcaConfig
     costs: LtCostsConfig
     acceptance: AcceptanceConfig
+    risk: LtRiskConfig
 
 
 @dataclass(frozen=True, slots=True)

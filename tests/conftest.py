@@ -98,6 +98,12 @@ LONGTERM: dict[str, object] = {
         "max_rejected_share": 0.5,
         "spread_min_samples": 24,
     },
+    "risk": {
+        "max_open_positions": 3,
+        "max_day_loss_frac": 0.25,
+        "max_drawdown_frac": 0.55,
+        "max_bar_age_hours": 30,
+    },
     "acceptance": {
         "dsr_min": 0.95,
         "confidence": 0.95,

@@ -295,6 +295,8 @@ def test_intraday_domain(config_dir: Path, keys: list[str | int], value: Any, ms
         (["costs", "max_rejected_share"], 0, "max_rejected_share"),
         (["costs", "spread_min_samples"], 0, "spread_min_samples"),
         (["acceptance", "confidence"], 1.0, "confidence"),
+        (["risk", "max_open_positions"], 0, "max_open_positions"),
+        (["risk", "max_drawdown_frac"], 1.5, "max_drawdown_frac"),
         (["acceptance", "mean_block_days"], 0.5, "mean_block_days"),
         (["acceptance", "n_boot"], 0, "n_boot"),
         (["universe", "warmup_days"], -1, "warmup_days"),
