@@ -125,3 +125,25 @@ def test_first_decision_skips_the_warm_up() -> None:
     w = pl.DataFrame({DATE: [T0 + i * D for i in range(5)], "A": [0.0, 0.0, 0.0, 0.5, 0.0]})
     assert ev.first_decision(w) == 3
     assert ev.first_decision(w.with_columns(A=pl.lit(0.0))) == 0
+
+
+def test_per_asset_sub_markets_keep_volumes_on_the_price_grid(config_dir: Path) -> None:
+    """Critère « actifs » : un sous-marché qui commence plus tard garde des volumes sur la même
+    grille que ses prix (défaut du premier verdict de la vague 2 : choc de volume refusé)."""
+    setup = _setup(config_dir)
+    late = setup.market.closes.with_columns(
+        pl.when(pl.int_range(pl.len()) >= 100).then(pl.col("SOLUSDT")).alias("SOLUSDT")
+    )
+    market = dataclasses.replace(setup.market, closes=late, volumes=late.fill_null(1.0))
+    groups = ev._groups(dataclasses.replace(setup, market=market), TS)
+    for _, sub in groups:
+        assert sub.volumes[DATE].to_list() == sub.closes[DATE].to_list()
+        assert sub.volumes.columns == sub.closes.columns
+    shock = load_hypothesis(ROOT / "lt_volume_shock.yaml")
+    result = ev.per_asset(
+        dataclasses.replace(setup, market=market),
+        shock,
+        {"volume_ratio": 2.0},
+        strategies.policy_for(shock),
+    )
+    assert set(result) == set(TRADE)

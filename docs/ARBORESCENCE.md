@@ -210,7 +210,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 32 | 2 · Recherche | `research/bootstrap.py` | validé |
 | 33 | 2 · Recherche | `research/cv.py` | validé |
 | 34 | 2 · Recherche | `research/ic.py` (remonté de l'intraday ; version transversale) | validé |
-| 35 | 2 · Recherche | `research/report.py` (règle de stabilité alignée sur la spec LT.6 : ≥ 3 sous-périodes battues dont 1 baissière) | validé |
+| 35 | 2 · Recherche | `research/report.py` (règle de stabilité alignée sur la spec LT.6 : ≥ 3 sous-périodes battues dont 1 baissière ; sous-période à plat = Sharpe 0) | validé |
 | 36 | 3 · Long terme | `longterm/klines.py` + `longterm/klines_build.py` (+ `core/paths.py` : `lt_klines`) | validé |
 | 37 | 3 · Long terme | `longterm/universe.py` (+ `core/config.py` : `universe.*`, `core/paths.py` : `lt_klines_dir`) | validé |
 | 37 bis | 3 · Long terme | `longterm/universe.py` : univers `trade_eur` (`quoted`, paires EUR ≥ 100 k€/jour) + config `quote_min_volume` | validé |
@@ -223,7 +223,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 42 | 3 · Long terme | `sizing/sizing.py` | validé |
 | 43 | 3 · Long terme | `longterm/lt_backtest.py` (+ `oracle_weights`) | validé |
 | 44 | 3 · Long terme | `longterm/lt_report.py` | validé |
-| 44 ter | 3 · Long terme | `longterm/lt_evaluate.py` (sorti de `lt_wave`) + univers `trade_eur` dans le gate et le backtest ; commande `costs` déplacée de `strategies` vers `lt_wave` ; `pair_rules` seule source du coût d'un ordre | validé |
+| 44 ter | 3 · Long terme | `longterm/lt_evaluate.py` (sorti de `lt_wave`) + univers `trade_eur` dans le gate et le backtest ; commande `costs` déplacée de `strategies` vers `lt_wave` ; `pair_rules` seule source du coût d'un ordre ; volumes des sous-marchés sur la grille des prix | validé |
 | 44 bis | 3 · Long terme | `longterm/lt_wave.py` (+ `signals.equal_weight`, `strategies.multi_asset` et `breadth_lengths`, config `acceptance` ; spreads mesurés, essais déjà jugés gardés) | validé |
 | 45 | 4 · Paper LT | `live/risk.py` | à faire |
 | 46 | 4 · Paper LT | `live/broker.py` | à faire |

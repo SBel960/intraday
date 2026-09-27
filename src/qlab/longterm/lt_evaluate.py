@@ -111,7 +111,9 @@ def _groups(setup: Setup, hypothesis: Hypothesis) -> list[tuple[str, strategies.
         dates = both[sg.DATE].to_numpy()
         start = max(int(dates[both[a].is_not_null().to_numpy()].min()) for a in group)
         closes = both.filter(pl.col(sg.DATE) >= start)  # grille complète depuis que tous existent
-        out.append(("+".join(group), dataclasses.replace(market, closes=closes)))
+        since = pl.col(sg.DATE) >= start
+        volumes = market.volumes.filter(since).select(sg.DATE, *group)  # même grille que les prix
+        out.append(("+".join(group), dataclasses.replace(market, closes=closes, volumes=volumes)))
     return out
 
 

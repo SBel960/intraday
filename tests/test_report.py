@@ -22,6 +22,7 @@ from qlab.research.report import (
     evaluate,
     render,
 )
+from qlab.research.report import _sub as report_sub
 
 CRIT = Criteria(
     dsr_min=0.95,
@@ -180,3 +181,13 @@ def test_render_lists_verdict_criteria_and_tables() -> None:
 def test_errors(kw: dict[str, object], crit: Criteria, msg: str) -> None:
     with pytest.raises(DataError, match=msg):
         evaluate(_evidence(0.0015, **kw), crit)
+
+
+def test_flat_subperiod_counts_as_zero_sharpe() -> None:
+    """Une année entière en cash (rendements nuls) : Sharpe 0, pas d'erreur ; elle bat un
+    buy & hold qui perd (Sharpe < 0) et perd face à un buy & hold qui gagne."""
+    flat = np.zeros(4)
+    down, up = np.array([-0.01, 0.0, -0.02, 0.005]), np.array([0.01, 0.0, 0.02, -0.005])
+    bad_year = report_sub("2022", flat, down, 4)
+    assert bad_year.sharpe == 0.0 and bad_year.beats and bad_year.bear
+    assert not report_sub("2023", flat, up, 4).beats

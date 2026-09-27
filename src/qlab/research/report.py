@@ -119,12 +119,21 @@ class Report:
     assets: tuple[SubResult, ...] = ()
 
 
+def _annual_sharpe(r: Floats, ppy: int) -> float:
+    """Sharpe annualisé ; série à plat (ex. une année entière en cash) ⇒ 0 : ne rien gagner
+    ni perdre est un résultat, pas une erreur (bat un buy & hold négatif, perd face à un
+    positif)."""
+    if np.ptp(r) == 0:
+        return 0.0
+    return stats.annualize(stats.moments(r).sharpe, ppy)
+
+
 def _sub(label: str, strat: Floats, bench: Floats, ppy: int) -> SubResult:
     return SubResult(
         label,
         strat.size,
-        stats.annualize(stats.moments(strat).sharpe, ppy),
-        stats.annualize(stats.moments(bench).sharpe, ppy),
+        _annual_sharpe(strat, ppy),
+        _annual_sharpe(bench, ppy),
         bear=float(np.prod(1 + bench)) < 1,
     )
 
