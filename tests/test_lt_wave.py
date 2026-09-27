@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import zipfile
 from pathlib import Path
 
@@ -11,6 +12,7 @@ import pytest
 from fakes import FALLBACK_FEES, binance_symbol, exchange_info
 
 from qlab.core.config import load_config
+from qlab.core.errors import DataError
 from qlab.core.paths import DataPaths
 from qlab.core.timeutils import MS_PER_DAY, date_to_ms
 from qlab.exchange.snapshots import SnapshotStore
@@ -147,3 +149,39 @@ def test_cli(config_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert table.count("| lt_") == 27 * 2  # 27 essais × 2 paliers (config de test)
     assert "lt_xs_momentum_eur · lookback_days=90, top_k=3 | t1 |" in table
     assert len(TrialRegistry(paths.trials).trials()) == trials_before
+    # Verdict seul, en ligne de commande, d'un essai enregistré par « run »
+    reg = TrialRegistry(paths.trials)
+    name = next(
+        strategies.trial_name(h, p)
+        for h in FICHES
+        for p in h.grid()
+        if reg.find("longterm", h.id, p) is not None
+    )
+    judge = ["--config", str(config_dir), "judge", "--tier", "t1", "--trial", name]
+    assert lt_wave.main([*judge, "--hypotheses", str(HYPOTHESES)]) == 0
+    verdicts = next(paths.reports.glob("lt_verdict_*.md")).read_text()
+    assert f"## {name}" in verdicts
+    assert len(TrialRegistry(paths.trials).trials()) == trials_before
+
+
+def test_judge_only_recorded_trials_without_recording(config_dir: Path, tmp_path: Path) -> None:
+    """Verdict seul : essai enregistré ⇒ verdict, registre inchangé ; nom inconnu, essai jamais
+    enregistré ou résultat différent du registre ⇒ refus."""
+    registry = TrialRegistry(tmp_path / "trials.jsonl")
+    setup = _setup(config_dir)
+    lt_wave.run_wave(setup, FICHES, registry)
+    pairs = [(h, p) for h in FICHES for p in h.grid()]
+    done = [(h, p) for h, p in pairs if registry.find("longterm", h.id, p) is not None]
+    never = [(h, p) for h, p in pairs if registry.find("longterm", h.id, p) is None]
+    name = strategies.trial_name(*done[0])
+    lines = len(registry.trials())
+    body = lt_wave.judge_only(setup, FICHES, registry, [name])
+    assert f"## {name}" in body and len(registry.trials()) == lines
+    with pytest.raises(DataError, match="essai inconnu"):
+        lt_wave.judge_only(setup, FICHES, registry, ["lt_x · a=1"])
+    with pytest.raises(DataError, match="pas enregistré"):
+        lt_wave.judge_only(setup, FICHES, registry, [strategies.trial_name(*never[0])])
+    noisy = setup.market.closes.with_columns(pl.exclude(DATE) * (1 + 0.1 * np.sin(np.arange(DAYS))))
+    other = dataclasses.replace(setup, market=dataclasses.replace(setup.market, closes=noisy))
+    with pytest.raises(DataError, match="différent de celui du registre"):
+        lt_wave.judge_only(other, FICHES, registry, [name])

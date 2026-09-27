@@ -63,6 +63,9 @@ def test_medians_need_enough_samples(tmp_path: Path) -> None:
         spreads = {"BTCEUR": value} | ({"PEPEEUR": 0.02} if i == 0 else {})
         append_record(paths.spreads, {"ts_ms": T0 + i, "spreads": spreads})
     assert sp.medians(paths, 2) == pytest.approx({"BTCEUR": 0.002})
+    # jusqu'au 2ᵉ relevé seulement : 0,1 % et 0,3 % ⇒ médiane 0,2 % aussi, PEPE (1 relevé) écarté
+    assert sp.medians(paths, 2, until_ms=T0 + 1) == pytest.approx({"BTCEUR": 0.002})
+    assert sp.medians(paths, 1, until_ms=T0) == pytest.approx({"BTCEUR": 0.001, "PEPEEUR": 0.02})
 
 
 def test_cli_sample_and_show(

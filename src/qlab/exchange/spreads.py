@@ -64,10 +64,14 @@ def fetch(url: str, *, notify: Callable[[str], None], **http_options: Any) -> li
     return book
 
 
-def medians(paths: DataPaths, min_samples: int) -> dict[str, float]:
-    """Médiane des spreads relevés, par paire ayant au moins ``min_samples`` relevés."""
+def medians(paths: DataPaths, min_samples: int, until_ms: int | None = None) -> dict[str, float]:
+    """Médiane des spreads relevés, par paire ayant au moins ``min_samples`` relevés ;
+    ``until_ms`` : seulement les relevés jusqu'à cet instant (refaire un calcul à l'identique,
+    ex. le verdict d'un essai enregistré avant de nouveaux relevés)."""
     series: dict[str, list[float]] = {}
     for record in read_records(paths.spreads):
+        if until_ms is not None and record["ts_ms"] > until_ms:
+            continue
         for symbol, value in record["spreads"].items():
             series.setdefault(symbol, []).append(float(value))
     return {s: statistics.median(v) for s, v in series.items() if len(v) >= min_samples}
