@@ -1,0 +1,15 @@
+# Cockpit local en direct (live/cockpit.py) : http://localhost:8765, visible de ce PC seulement.
+# Service permanent (pas de minuteur) ; installation : voir ops/README.md.
+[Unit]
+Description=qlab : cockpit local (http://localhost:8765)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/intraday
+ExecStart=%h/.venvs/qlab/bin/python -m qlab.live.cockpit --config config --trial "lt_ts_momentum · lookback_days=30"
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target
