@@ -510,7 +510,8 @@ class LtCostsConfig:
 @dataclass(frozen=True, slots=True)
 class AcceptanceConfig:
     """Critères d'acceptation (SPEC_LONG_TERME LT.6) et réglages du bootstrap stationnaire
-    (``research/report.py``). ``mean_block_days`` : longueur moyenne des blocs tirés."""
+    (``research/report.py``). ``mean_block_days`` : longueur moyenne des blocs tirés.
+    ``paper_min_days`` : jours de paper trading avant de conclure (``live/paper_report.py``)."""
 
     dsr_min: float
     confidence: float
@@ -520,6 +521,7 @@ class AcceptanceConfig:
     n_boot: int
     mean_block_days: float
     seed: int
+    paper_min_days: int
 
     def __post_init__(self) -> None:
         _fraction("dsr_min", self.dsr_min)
@@ -530,6 +532,7 @@ class AcceptanceConfig:
         _positive("n_boot", self.n_boot)
         _check(self.mean_block_days >= 1, "mean_block_days doit être ≥ 1")
         _non_negative("seed", self.seed)
+        _positive("paper_min_days", self.paper_min_days)
 
 
 @dataclass(frozen=True, slots=True)

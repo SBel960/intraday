@@ -113,6 +113,7 @@ LONGTERM: dict[str, object] = {
         "n_boot": 200,
         "mean_block_days": 10,
         "seed": 0,
+        "paper_min_days": 60,
     },
 }
 

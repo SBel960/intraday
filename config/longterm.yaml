@@ -51,6 +51,7 @@ acceptance:
   n_boot: 2000
   mean_block_days: 20                # blocs d'environ 3 semaines : garde l'autocorrélation
   seed: 20260926
+  paper_min_days: 60                 # paper avant de conclure (≈ 2 mois ; résultats dans l'IC du backtest)
 
 # Limites du paper trading puis du réel (live/risk.py), calées le 2026-09-27 sur le candidat
 # lt_ts_momentum · lookback_days=30 (choix de l'utilisateur : enveloppe du backtest).
