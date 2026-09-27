@@ -130,6 +130,7 @@ intraday/
 │   └── longterm/
 │       ├── klines.py              lecture des archives (ms/µs ligne par ligne), contrôle qualité, bougies tronquées marquées, trous
 │       ├── klines_build.py        construction de lt/klines_{1d|1h}/{paire}.parquet, reprise, erreurs isolées par paire
+│       ├── klines_rest.py         dernières bougies par l'API REST (paper) : même contrôle qualité que les archives, closes / en cours (ouverture = prix d'exécution), raccord (l'archive fait foi)
 │       ├── universe.py            univers point-in-time : tradé (chauffe) et observé (1 paire en dollar par actif, stablecoins et tokens à levier exclus, volume médian 30 j ≥ 1 M$)
 │       ├── funding.py             taux de financement USDⓈ-M → lt/futures/funding/{contrat}.parquet (heure exacte, intervalle lu par ligne), somme par jour
 │       ├── market_state.py        vue globale sur l'univers observé : largeur (part des actifs au-dessus de leur moyenne L j), dispersion, part de BTC dans les volumes (corrélations : quand une fiche en aura besoin)
@@ -230,6 +231,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 45 | 4 · Paper LT | `live/risk.py` (+ config `longterm.risk` : enveloppe du backtest du candidat) | validé |
 | 45b | 4 · Paper LT | `live/cockpit.py` + `live/cockpit.html` (demandé le 2026-09-27, hors plan initial) | validé |
 | 46 | 4 · Paper LT | `live/broker.py` | validé |
+| 46b | 4 · Paper LT | `longterm/klines_rest.py` | validé |
 | 47 | 4 · Paper LT | `live/paper.py` | à faire |
 
 **Phase 9 — Événements (informations hors marché), après le paper LT.** Décidée le 2026-09-25 : le projet ne regarde aujourd'hui que des chiffres de marché ; un tweet, une annonce de la Fed ou un piratage n'entrent dans aucun calcul, et le kill switch ne voit que leurs conséquences sur les prix. Usage prévu d'abord pour le **risque** (ne pas être exposé au mauvais moment), et seulement ensuite, éventuellement, comme signal (fiche d'hypothèse, essai compté dans le DSR, cost gate). Règles à respecter :
