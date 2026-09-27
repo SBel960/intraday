@@ -15,6 +15,9 @@ def test_tree_matches_documentation() -> None:
     assert p.ledger == Path("/data/meta/ledger.jsonl")
     assert p.trials == Path("/data/meta/trials.jsonl")
     assert p.spreads == Path("/data/meta/spreads.jsonl")
+    assert p.paper_journal("lt_ts_momentum_lookback_days_30") == Path(
+        "/data/meta/paper/lt_ts_momentum_lookback_days_30.jsonl"
+    )
     assert p.exchange_info_dir("binance") == Path("/data/meta/exchange_info/binance")
     assert p.logs == Path("/data/logs")
     assert p.reports == Path("/data/reports")
@@ -34,6 +37,7 @@ def test_documented_in_arborescence() -> None:
         "ledger.jsonl",
         "trials.jsonl",
         "spreads.jsonl",
+        "paper/{book}.jsonl",
         "exchange_info/{source}/",
         "logs/{component}/",
         "reports/",
@@ -67,3 +71,9 @@ def test_unsafe_symbols_rejected(symbol: str) -> None:
         DataPaths(Path("/data")).lt_klines("1d", symbol)
     with pytest.raises(ValueError, match="symbole invalide"):
         DataPaths(Path("/data")).lt_futures("funding", symbol)
+
+
+@pytest.mark.parametrize("book", ["", "../x", "A", "a b", "a/b"])
+def test_unsafe_paper_books_rejected(book: str) -> None:
+    with pytest.raises(ValueError, match="portefeuille invalide"):
+        DataPaths(Path("/data")).paper_journal(book)

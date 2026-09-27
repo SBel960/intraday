@@ -54,6 +54,11 @@ class DataPaths:
         """Relevés de spreads (meilleur prix acheteur / vendeur) : ``exchange/spreads.py``."""
         return self.meta / "spreads.jsonl"
 
+    def paper_journal(self, book: str) -> Path:
+        """Journal d'un portefeuille de paper trading : ``meta/paper/{book}.jsonl``
+        (``live/paper.py`` ; ``book`` : nom tiré de l'essai suivi)."""
+        return self.meta / "paper" / f"{_name('portefeuille', book)}.jsonl"
+
     def exchange_info_dir(self, source: str) -> Path:
         """Snapshots versionnés d'``exchangeInfo`` (``exchange/snapshots.py``)."""
         return self.meta / "exchange_info" / _name("source", source)

@@ -122,6 +122,7 @@ intraday/
 │   │   ├── cockpit.py             cockpit local en direct (127.0.0.1) : sert cockpit.html et l'état de qlab (signal de l'essai suivi, fraîcheur, spreads, minuteurs, limites) ; aucun ordre, aucune clé
 │   │   ├── cockpit.html           page du cockpit : prix, bougies, transactions et spreads reçus par le navigateur des flux publics de l'échange (seule sortie réseau hors core/http.py, côté navigateur)
 │   │   ├── broker.py              interface d'ordres (Broker) ; PaperBroker = exécution du backtest (test d'identité) ; réel toujours refusé : liste ce qui manque (flag, clé trading spot seul sans retrait ni transfert, IP) puis « non écrite »
+│   │   ├── paper_book.py          une journée de paper sans réseau ni disque : valeur, garde-fous, décision, exécution à l'identique du backtest (test d'identité) ; état rebâti depuis le journal
 │   │   └── paper.py               paper trading sur flux live, journal complet de chaque décision
 │   ├── events/                    phase 9 : informations hors marché (annonces, calendrier, actualité)
 │   │   ├── calendar.py            événements programmés (Fed, inflation US…) : fenêtres sans nouvelle position
@@ -165,6 +166,7 @@ $DATA_ROOT/
 │   ├── ledger.jsonl                                                   registre des apports / retraits (append-only)
 │   ├── gaps.parquet                                                   table des trous
 │   ├── spreads.jsonl                                                  relevés horaires des spreads (bookTicker) des paires cotées dans la devise du compte
+│   ├── paper/{book}.jsonl                                             journal du paper trading d'un essai (live/paper.py) : start, un enregistrement par barre (données, risque, décision, exécutions, soldes), resume
 │   └── trials.jsonl                                                   registre d'essais (N)
 ├── logs/{component}/YYYY-MM-DD.jsonl                                 journaux JSONL append-only (jsonlog.py)
 └── reports/                                                           rapports générés
@@ -232,6 +234,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 45b | 4 · Paper LT | `live/cockpit.py` + `live/cockpit.html` (demandé le 2026-09-27, hors plan initial) | validé |
 | 46 | 4 · Paper LT | `live/broker.py` | validé |
 | 46b | 4 · Paper LT | `longterm/klines_rest.py` | validé |
+| 46c | 4 · Paper LT | `live/paper_book.py` (+ `core/paths.py` : `paper_journal`) | validé |
 | 47 | 4 · Paper LT | `live/paper.py` | à faire |
 
 **Phase 9 — Événements (informations hors marché), après le paper LT.** Décidée le 2026-09-25 : le projet ne regarde aujourd'hui que des chiffres de marché ; un tweet, une annonce de la Fed ou un piratage n'entrent dans aucun calcul, et le kill switch ne voit que leurs conséquences sur les prix. Usage prévu d'abord pour le **risque** (ne pas être exposé au mauvais moment), et seulement ensuite, éventuellement, comme signal (fiche d'hypothèse, essai compté dans le DSR, cost gate). Règles à respecter :
