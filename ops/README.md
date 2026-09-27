@@ -22,6 +22,17 @@ systemctl --user daemon-reload
 systemctl --user enable --now qlab-exchange-info.timer qlab-spreads.timer qlab-paper.timer qlab-cockpit.service
 ```
 
+## Alertes téléphone (healthchecks.io)
+
+`hc-ping.sh VARIABLE UNITÉ`, appelé en `ExecStopPost` : signale le succès ou l'échec du passage à
+healthchecks.io, avec les 30 dernières lignes de sortie en cas d'échec. L'adresse de ping est lue
+dans `.env` (seule cette ligne) ; variable absente ⇒ rien n'est envoyé. Un passage absent à l'heure
+prévue (PC éteint, WSL fermé) est signalé par healthchecks lui-même (check en mode Cron).
+
+| Unité | Variable dans `.env` | Check healthchecks |
+|---|---|---|
+| `qlab-paper.service` | `HC_PAPER_URL` | Cron `5 0 * * *` UTC, grâce 3 h |
+
 ## Vérifier / désactiver
 
 ```bash

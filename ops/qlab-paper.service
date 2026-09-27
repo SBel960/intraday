@@ -10,3 +10,6 @@ After=network-online.target
 Type=oneshot
 WorkingDirectory=%h/intraday
 ExecStart=%h/.venvs/qlab/bin/python -m qlab.live.paper --config config --trial "lt_ts_momentum · lookback_days=30" run
+# Alerte téléphone (healthchecks.io, adresse HC_PAPER_URL dans .env) : succès ou échec du passage ;
+# passage absent à l'heure prévue (PC éteint) : healthchecks prévient de lui-même.
+ExecStopPost=%h/intraday/ops/hc-ping.sh HC_PAPER_URL qlab-paper.service
