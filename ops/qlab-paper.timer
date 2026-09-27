@@ -1,0 +1,11 @@
+# Chaque jour à 00:05 UTC : la barre 1d vient de clore, la suivante vient d'ouvrir (prix
+# d'exécution). Rattrapé au démarrage si le PC était éteint (la barre reste valable 30 h).
+[Unit]
+Description=qlab : paper trading long terme, chaque jour à 00:05 UTC
+
+[Timer]
+OnCalendar=*-*-* 00:05:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

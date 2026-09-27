@@ -1,0 +1,12 @@
+# Paper trading long terme : une décision par barre journalière (live/paper.py).
+# Lancé par qlab-paper.timer ; installation : voir ops/README.md. Ouvrir d'abord le portefeuille
+# une fois à la main : python -m qlab.live.paper --config config --trial "…" start
+[Unit]
+Description=qlab : paper trading long terme (passage quotidien)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/intraday
+ExecStart=%h/.venvs/qlab/bin/python -m qlab.live.paper --config config --trial "lt_ts_momentum · lookback_days=30" run

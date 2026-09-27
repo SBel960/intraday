@@ -7,6 +7,7 @@ dans `$DATA_ROOT/logs/`.
 |---|---|
 | `qlab-exchange-info.timer` → `.service` | chaque heure : `exchange_info fetch --if-due` (nouveau snapshot si le dernier a plus de `snapshot_refresh_hours`) |
 | `qlab-spreads.timer` → `.service` | chaque heure : `spreads sample` (un relevé `bookTicker` des paires EUR et tradées, dans `meta/spreads.jsonl`) |
+| `qlab-paper.timer` → `.service` | chaque jour à 00:05 UTC : `live.paper run` (une décision sur la barre close, journal `meta/paper/{book}.jsonl`) ; portefeuille ouvert une fois à la main par `start` |
 
 ## Installer / activer
 
@@ -14,8 +15,9 @@ dans `$DATA_ROOT/logs/`.
 mkdir -p ~/.config/systemd/user
 ln -sf ~/intraday/ops/qlab-exchange-info.service ~/intraday/ops/qlab-exchange-info.timer ~/.config/systemd/user/
 ln -sf ~/intraday/ops/qlab-spreads.service ~/intraday/ops/qlab-spreads.timer ~/.config/systemd/user/
+ln -sf ~/intraday/ops/qlab-paper.service ~/intraday/ops/qlab-paper.timer ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now qlab-exchange-info.timer qlab-spreads.timer
+systemctl --user enable --now qlab-exchange-info.timer qlab-spreads.timer qlab-paper.timer
 ```
 
 ## Vérifier / désactiver

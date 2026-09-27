@@ -123,7 +123,7 @@ intraday/
 │   │   ├── cockpit.html           page du cockpit : prix, bougies, transactions et spreads reçus par le navigateur des flux publics de l'échange (seule sortie réseau hors core/http.py, côté navigateur)
 │   │   ├── broker.py              interface d'ordres (Broker) ; PaperBroker = exécution du backtest (test d'identité) ; réel toujours refusé : liste ce qui manque (flag, clé trading spot seul sans retrait ni transfert, IP) puis « non écrite »
 │   │   ├── paper_book.py          une journée de paper sans réseau ni disque : valeur, garde-fous, décision, exécution à l'identique du backtest (test d'identité) ; état rebâti depuis le journal
-│   │   └── paper.py               paper trading sur flux live, journal complet de chaque décision
+│   │   └── paper.py               commande start / run (00:05 UTC : horloge contrôlée, archives + bougies REST, signal, paper_book.day, journal sous verrou) / status / resume
 │   ├── events/                    phase 9 : informations hors marché (annonces, calendrier, actualité)
 │   │   ├── calendar.py            événements programmés (Fed, inflation US…) : fenêtres sans nouvelle position
 │   │   ├── news.py                collecte d'annonces (Binance, GDELT…), horodatées à la RÉCEPTION, RAW append-only
@@ -235,7 +235,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 46 | 4 · Paper LT | `live/broker.py` | validé |
 | 46b | 4 · Paper LT | `longterm/klines_rest.py` | validé |
 | 46c | 4 · Paper LT | `live/paper_book.py` (+ `core/paths.py` : `paper_journal`) | validé |
-| 47 | 4 · Paper LT | `live/paper.py` | à faire |
+| 47 | 4 · Paper LT | `live/paper.py` (+ `ops/qlab-paper.{service,timer}`) | validé |
 
 **Phase 9 — Événements (informations hors marché), après le paper LT.** Décidée le 2026-09-25 : le projet ne regarde aujourd'hui que des chiffres de marché ; un tweet, une annonce de la Fed ou un piratage n'entrent dans aucun calcul, et le kill switch ne voit que leurs conséquences sur les prix. Usage prévu d'abord pour le **risque** (ne pas être exposé au mauvais moment), et seulement ensuite, éventuellement, comme signal (fiche d'hypothèse, essai compté dans le DSR, cost gate). Règles à respecter :
 
