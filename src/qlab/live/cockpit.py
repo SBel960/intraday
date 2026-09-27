@@ -7,11 +7,14 @@ puis ouvrir l'adresse affichée dans le navigateur (Windows : WSL2 relaie ``loca
   publics de l'échange (sans clé) ; ce module ne sort pas sur le réseau.
 - **État de qlab** (``/api/state``, recalculé au plus toutes les ``CACHE_MS``) : signal de
   l'essai suivi à la dernière clôture locale, fraîcheur des données, spreads médians relevés,
-  minuteurs systemd ``qlab-*``, registre des essais, limites de risque, disque.
+  minuteurs systemd ``qlab-*``, registre des essais, limites de risque, disque ;
+- **paper trading** (``paper_state``) : portefeuille rebâti depuis le journal
+  (``paper_book.replay``), valeurs de clôture, derniers passages, prochain rééquilibrage. La page
+  le valorise aux prix en direct ; sans journal, elle garde un portefeuille **fictif** (capital
+  du palier réparti selon le signal).
 
 Le serveur n'écoute que ``127.0.0.1`` : rien n'est exposé au réseau local. Il ne lit aucune clé
-et ne passe aucun ordre. Le portefeuille affiché est **fictif** (capital du palier, poids du
-signal) tant que ``live/paper.py`` n'existe pas.
+et ne passe aucun ordre.
 """
 
 from __future__ import annotations
@@ -34,12 +37,15 @@ from qlab.core.cli import Context, run_command
 from qlab.core.config import QlabConfig
 from qlab.core.errors import DataError
 from qlab.core.paths import DataPaths
-from qlab.core.records import read_records
+from qlab.core.records import Record, read_records
 from qlab.core.timeutils import MS_PER_DAY, MS_PER_MIN, US_PER_MS, date_str, now_ms
 from qlab.exchange.snapshots import SnapshotStore
 from qlab.exchange.spreads import medians as spread_medians
+from qlab.live import paper_book, paper_report
+from qlab.live.paper import book_name
 from qlab.longterm import signals as sg
 from qlab.longterm import strategies
+from qlab.longterm.allocation import Policy, is_calendar_day
 from qlab.research.hypothesis import Hypothesis, load_all
 from qlab.research.trials import TrialRegistry, TrialResult
 
@@ -48,17 +54,6 @@ HOST = "127.0.0.1"  # jamais 0.0.0.0 : la page n'est visible que de cette machin
 CACHE_MS = MS_PER_MIN
 TIMER_PREFIX = "qlab-"
 SYSTEMCTL = ("systemctl", "--user", "list-timers", "--all", "--output=json", "--no-pager")
-
-
-def trial_by_name(
-    hypotheses: Sequence[Hypothesis], name: str
-) -> tuple[Hypothesis, dict[str, float]]:
-    """Fiche et paramètres de l'essai ``name`` (nom de ``strategies.trial_name``)."""
-    for h in hypotheses:
-        for params in h.grid():
-            if strategies.trial_name(h, params) == name:
-                return h, dict(params)
-    raise DataError(f"essai inconnu : {name!r} (nom exact des rapports de vague attendu)")
 
 
 def signal(
@@ -78,6 +73,60 @@ def signal(
         "weights": {a: float(last[a]) for a in assets},
         "closes": {a: closes[a] for a in assets},
         "policy_days": strategies.policy_for(hypothesis).period_days,
+    }
+
+
+def paper_state(
+    paths: DataPaths, trial: str, anchor_ms: int, policy: Policy, min_days: int
+) -> dict[str, Any] | None:
+    """Portefeuille du paper d'après son journal ; ``None`` s'il n'a pas été ouvert."""
+    path = paths.paper_journal(book_name(trial))
+    if not path.exists():
+        return None
+    records = read_records(path)
+    book = paper_book.replay(records)
+    days = [r for r in records if r.get("kind") == "day"]
+    run = paper_report.paper_run(records) if days else None
+    yesterday = now_ms() // MS_PER_DAY * MS_PER_DAY - MS_PER_DAY
+    last = yesterday if book.last_bar_ms is None else book.last_bar_ms
+    return {
+        "started_ms": records[0]["run_ms"],
+        "capital": records[0]["capital"],
+        "tier": records[0]["tier"],
+        "cash": str(book.cash),
+        "held": {s: str(q) for s, q in book.held.items() if q},
+        "halted": book.halted,
+        "days": 0 if run is None else run.days,
+        "min_days": min_days,
+        "missed_bars": 0 if run is None else run.missed_bars,
+        "equity": [[r["bar_ms"], r["value_close"]] for r in days],
+        "recent": [_passage(r) for r in reversed(days[-7:])],
+        "next_rebalance_bar_ms": next_rebalance(last, anchor_ms, policy),
+    }
+
+
+def next_rebalance(last_bar_ms: int, anchor_ms: int, policy: Policy) -> int | None:
+    """Première barre de rééquilibrage après ``last_bar_ms`` (calendaire seulement)."""
+    if policy.kind != "calendar":
+        return None
+    days = (last_bar_ms + k * MS_PER_DAY for k in range(1, policy.period_days + 1))
+    return next(d for d in days if is_calendar_day(d, anchor_ms, policy.period_days))
+
+
+def _passage(record: Record) -> dict[str, Any]:
+    orders = [
+        f"{e['side']} {e['symbol']} {e['qty']}"
+        + ("" if e["accepted"] else f" refusé ({e['reason']})")
+        for e in record["executions"]
+    ]
+    risk = record["risk"]
+    return {
+        "bar_ms": record["bar_ms"],
+        "value": record["value_close"],
+        "action": risk["action"],
+        "reasons": risk["reasons"],
+        "orders": orders,
+        "missed": record.get("missed_bars", 0),
     }
 
 
@@ -108,7 +157,7 @@ def collect(
     snapshot = store.latest()
     if snapshot is None:
         raise DataError("aucun snapshot exchangeInfo : lancer d'abord exchange_info fetch")
-    hypothesis, params = trial_by_name(load_all(hypotheses_dir), trial)
+    hypothesis, params = strategies.trial_by_name(load_all(hypotheses_dir), trial)
     market = strategies.load_market(paths, config, snapshot, (), exchange)
     registry = TrialRegistry(paths.trials)
     recorded = registry.find("longterm", hypothesis.id, params)
@@ -148,6 +197,13 @@ def collect(
         },
         "snapshot": {"name": snapshot.path.name, "fetched_ms": snapshot.fetched_ms},
         "trials": {"n": registry.n_trials("longterm")},
+        "paper": paper_state(
+            paths,
+            trial,
+            int(market.closes[sg.DATE][0]),
+            strategies.policy_for(hypothesis),
+            config.longterm.acceptance.paper_min_days,
+        ),
         "timers": _systemd_timers(),
         "disk": {"used": disk.used, "total": disk.total},
     }

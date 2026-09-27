@@ -39,7 +39,6 @@ from qlab.core.records import Record, read_records
 from qlab.core.timeutils import MS_PER_DAY, date_str, now_ms
 from qlab.exchange.snapshots import SnapshotStore
 from qlab.exchange.spreads import medians as spread_medians
-from qlab.live.cockpit import trial_by_name
 from qlab.live.paper import book_name
 from qlab.longterm import klines, lt_backtest, strategies
 from qlab.longterm import lt_evaluate as ev
@@ -181,7 +180,7 @@ def _backtest_returns(ctx: Context, trial: str) -> Floats:
     snapshot = SnapshotStore(ctx.paths, ex.name).latest()
     if snapshot is None:
         raise DataError("aucun snapshot exchangeInfo : lancer d'abord exchange_info fetch")
-    h, params = trial_by_name(load_all(ctx.args.hypotheses), trial)
+    h, params = strategies.trial_by_name(load_all(ctx.args.hypotheses), trial)
     market = strategies.load_market(ctx.paths, config, snapshot, (), ex.name)
     bars = {s: klines.load(ctx.paths, "1d", s) for s in config.base.symbols.trade}
     spreads = spread_medians(ctx.paths, config.longterm.costs.spread_min_samples)

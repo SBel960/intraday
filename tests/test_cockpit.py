@@ -17,11 +17,13 @@ import pytest
 from qlab.core.config import load_config
 from qlab.core.errors import DataError
 from qlab.core.paths import DataPaths
+from qlab.core.records import append_record
 from qlab.core.timeutils import MS_PER_DAY, date_to_ms
 from qlab.live import cockpit as ck
 from qlab.longterm import strategies
+from qlab.longterm.allocation import Policy
 from qlab.longterm.signals import DATE
-from qlab.research.hypothesis import load_all, load_hypothesis
+from qlab.research.hypothesis import load_hypothesis
 
 ROOT = Path(__file__).resolve().parent.parent / "hypotheses"
 TS = load_hypothesis(ROOT / "lt_ts_momentum.yaml")
@@ -43,13 +45,6 @@ def _market(config_dir: Path) -> strategies.Market:
     )
     flat = pl.DataFrame({DATE: closes[DATE], "funding_1d": [0.0] * DAYS})
     return strategies.Market(closes, closes, flat, {}, 365, config.longterm.signals, {})
-
-
-def test_trial_by_name() -> None:
-    h, params = ck.trial_by_name(load_all(ROOT), "lt_ts_momentum · lookback_days=30")
-    assert (h.id, params) == ("lt_ts_momentum", {"lookback_days": 30.0})
-    with pytest.raises(DataError, match="essai inconnu"):
-        ck.trial_by_name(load_all(ROOT), "lt_ts_momentum · lookback_days=31")
 
 
 def test_signal_of_the_last_close(config_dir: Path) -> None:
@@ -139,3 +134,68 @@ def test_data_error_is_reported_not_crashed(serve) -> None:  # type: ignore[no-u
 def test_page_ships_with_the_module() -> None:
     page = ck.PAGE.read_text(encoding="utf-8")
     assert "<title>Cockpit qlab</title>" in page and "/api/state" in page
+
+
+def test_next_rebalance() -> None:
+    """Hebdomadaire ancré au jour 0 : après le jour 2 → jour 7 ; après le jour 7 → jour 14."""
+    weekly = Policy("calendar", period_days=7)
+    assert ck.next_rebalance(T0 + 2 * MS_PER_DAY, T0, weekly) == T0 + 7 * MS_PER_DAY
+    assert ck.next_rebalance(T0 + 7 * MS_PER_DAY, T0, weekly) == T0 + 14 * MS_PER_DAY
+    assert ck.next_rebalance(T0, T0, Policy("buy_hold")) is None
+
+
+def test_paper_state_from_the_journal(config_dir: Path) -> None:
+    """Pas de journal ⇒ None ; start 50 € puis deux barres (achat BTC, puis refus) ⇒ état."""
+    paths = DataPaths(load_config(config_dir).base.data.root)
+    weekly = Policy("calendar", period_days=7)
+    trial = "lt_ts_momentum · lookback_days=30"
+    assert ck.paper_state(paths, trial, T0, weekly, 60) is None
+    journal = paths.paper_journal("lt_ts_momentum_lookback_days_30")
+    buy = {
+        "side": "BUY",
+        "symbol": "BTCUSDT",
+        "qty": "0.0001",
+        "accepted": True,
+        "reason": None,
+        "fee": "0.01",
+    }
+    no = {
+        "side": "BUY",
+        "symbol": "ETHUSDT",
+        "qty": "0.001",
+        "accepted": False,
+        "reason": "x",
+        "fee": "0",
+    }
+    for record in (
+        {"kind": "start", "run_ms": T0, "capital": "50.0", "tier": "t0", "quote": "USDT"},
+        _day(0, "50.0", [buy], cash="40", held={"BTCUSDT": "0.0001", "ETHUSDT": "0"}),
+        _day(3, "51.5", [no], cash="40", held={"BTCUSDT": "0.0001"}, missed_bars=2),
+    ):
+        append_record(journal, record)
+    st = ck.paper_state(paths, trial, T0, weekly, 60)
+    assert st is not None
+    assert (st["capital"], st["cash"], st["held"]) == ("50.0", "40", {"BTCUSDT": "0.0001"})
+    assert (st["days"], st["min_days"], st["missed_bars"], st["halted"]) == (3, 60, 2, False)
+    assert st["equity"] == [[T0, "50.0"], [T0 + 3 * MS_PER_DAY, "51.5"]]
+    assert [r["orders"] for r in st["recent"]] == [
+        ["BUY ETHUSDT 0.001 refusé (x)"],
+        ["BUY BTCUSDT 0.0001"],
+    ]
+    assert st["next_rebalance_bar_ms"] == T0 + 7 * MS_PER_DAY
+
+
+def _day(
+    i: int, value: str, executions: list[dict[str, object]], **after: object
+) -> dict[str, object]:
+    missed = after.pop("missed_bars", 0)
+    return {
+        "kind": "day",
+        "bar_ms": T0 + i * MS_PER_DAY,
+        "value_close": value,
+        "risk": {"action": "trade", "reasons": []},
+        "executions": executions,
+        "after": after,
+        "halted": False,
+        "missed_bars": missed,
+    }

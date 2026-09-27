@@ -41,7 +41,6 @@ from qlab.exchange.exchange_info import measure_clock
 from qlab.exchange.snapshots import SnapshotStore
 from qlab.exchange.spreads import medians as spread_medians
 from qlab.live import paper_book as pb
-from qlab.live.cockpit import trial_by_name
 from qlab.longterm import klines, klines_rest, lt_backtest, strategies
 from qlab.longterm import signals as sg
 from qlab.research.hypothesis import Hypothesis, load_all
@@ -254,7 +253,7 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def _action(ctx: Context) -> int:
-    h, params = trial_by_name(load_all(ctx.args.hypotheses), ctx.args.trial)
+    h, params = strategies.trial_by_name(load_all(ctx.args.hypotheses), ctx.args.trial)
     if ctx.args.cmd == "start":
         return _start(ctx, h)
     if ctx.args.cmd == "run":

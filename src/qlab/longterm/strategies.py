@@ -233,3 +233,14 @@ def breadth_lengths(hypotheses: Sequence[Hypothesis]) -> list[int]:
 
 def trial_name(hypothesis: Hypothesis, params: Params) -> str:
     return f"{hypothesis.id} · " + ", ".join(f"{k}={v:g}" for k, v in params.items())
+
+
+def trial_by_name(
+    hypotheses: Sequence[Hypothesis], name: str
+) -> tuple[Hypothesis, dict[str, float]]:
+    """Fiche et paramètres de l'essai ``name`` (tel qu'écrit par ``trial_name``)."""
+    for h in hypotheses:
+        for params in h.grid():
+            if trial_name(h, params) == name:
+                return h, dict(params)
+    raise DataError(f"essai inconnu : {name!r} (nom exact des rapports de vague attendu)")

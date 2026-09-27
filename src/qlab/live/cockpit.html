@@ -144,7 +144,15 @@ td { text-align: right; padding: 5px 0; border-top: 1px solid var(--line); white
 .sys-row .num { font-size: 12px; text-align: right; }
 .foot { margin-top: 16px; font-size: 12px; color: var(--faint); max-width: 90ch; }
 
+.journal-row { margin-top: 12px; }
+.journal-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 16px; align-items: start; }
+.journal-grid canvas { width: 100%; height: auto; max-width: 100%; background: var(--panel-2); border-radius: 6px; }
+.scroll { overflow-x: auto; }
+#journal-card th:last-child { text-align: left; padding-left: 12px; }
+td.orders { text-align: left; white-space: normal; line-height: 1.5; padding-left: 12px; }
+
 @media (max-width: 1100px) {
+  .journal-grid { grid-template-columns: 1fr; }
   .main { grid-template-columns: 1fr; }
   .lower { grid-template-columns: 1fr 1fr; }
   .lower > :first-child { grid-column: 1 / -1; }
@@ -192,7 +200,7 @@ td { text-align: right; padding: 5px 0; border-top: 1px solid var(--line); white
 
   <aside class="side">
     <article class="card">
-      <div class="card-head"><h2>Portefeuille fictif</h2><span class="tag sim">simulation</span></div>
+      <div class="card-head"><h2 id="pf-title">Portefeuille</h2><span class="tag sim" id="pf-tag">—</span></div>
       <div class="value num" id="pf-value">—</div>
       <div class="sub" id="pf-sub">—</div>
       <div class="alloc" id="pf-alloc"></div>
@@ -227,9 +235,19 @@ td { text-align: right; padding: 5px 0; border-top: 1px solid var(--line); white
   </article>
 </section>
 
-<p class="foot">Prix en direct reçus des flux publics de l'échange, sans clé. Le portefeuille est une simulation :
-capital du premier palier réparti selon le signal de la dernière clôture locale, valorisé aux prix du moment.
-Aucun ordre n'est passé depuis cette page.</p>
+<section class="journal-row">
+  <article class="card" id="journal-card" hidden>
+    <div class="card-head"><h2>Journal du paper</h2><span class="legend" id="journal-meta">—</span></div>
+    <div class="journal-grid">
+      <canvas id="equity" width="720" height="220" aria-label="Valeur du paper à chaque clôture"></canvas>
+      <div class="scroll"><table><thead><tr><th>Barre</th><th>Valeur</th><th>Garde-fous</th><th>Ordres</th></tr></thead><tbody id="journal"></tbody></table></div>
+    </div>
+  </article>
+</section>
+
+<p class="foot">Prix en direct reçus des flux publics de l'échange, sans clé. Le portefeuille est celui du paper trading
+(journal de qlab) valorisé aux prix du moment ; sans journal, une simulation du signal. Aucun ordre n'est passé depuis
+cette page, et le paper trading n'engage aucun argent.</p>
 
 <script>
 "use strict";
@@ -265,7 +283,7 @@ async function loadState() {
     S.state = d; S.stateAt = Date.now();
     $("banner").hidden = true;
     if (first) boot();
-    renderSystem(); renderPortfolio(); renderRisk(); renderMomentum();
+    renderSystem(); renderPortfolio(); renderRisk(); renderMomentum(); renderJournal();
   } catch (e) {
     $("banner").hidden = false;
     $("banner").textContent = "État qlab indisponible : " + e.message + ". Le serveur local tourne-t-il ? (python -m qlab.live.cockpit)";
@@ -466,32 +484,47 @@ function onTrade(d) {
   const body = $("tape"); body.prepend(tr); while (body.rows.length > 40) body.deleteRow(-1);
 }
 
-/* ---------- Portefeuille fictif ---------- */
+/* ---------- Portefeuille : celui du paper (journal) sinon fictif (signal × capital) ---------- */
+function holdings() {
+  const st = S.state, pp = st.paper;
+  if (pp) return { cash: +pp.cash, qty: Object.fromEntries(Object.entries(pp.held).map(([s, q]) => [s, +q])), start: +pp.capital };
+  const sg = st.signal, cap = st.capital.amount, qty = {};
+  for (const [s, w] of Object.entries(sg.weights)) if (w) qty[s] = cap * w / sg.closes[s];
+  return { cash: cap * (1 - sum(sg.weights)), qty, start: cap };
+}
 function pfValue(prices) {
-  const st = S.state, sg = st.signal, cap = st.capital.amount;
-  let v = 1;
-  for (const [s, w] of Object.entries(sg.weights)) {
-    if (!w) continue; const p = prices[s]; if (p == null) return null;
-    v += w * (p / sg.closes[s] - 1);
-  }
-  return cap * v;
+  const h = holdings(); let v = h.cash;
+  for (const [s, q] of Object.entries(h.qty)) { if (!q) continue; const p = prices[s]; if (p == null) return null; v += q * p; }
+  return v;
 }
 function renderPortfolio() {
   const st = S.state; if (!st) return;
-  const sg = st.signal, v = pfValue(S.px), cap = st.capital.amount;
+  const pp = st.paper, h = holdings(), v = pfValue(S.px);
+  $("pf-title").textContent = pp ? "Paper trading" : "Portefeuille fictif";
+  const tag = $("pf-tag");
+  tag.className = "tag " + (!pp ? "sim" : pp.halted ? "bad" : "on");
+  tag.textContent = !pp ? "simulation" : pp.halted ? "arrêt verrouillé" : "actif";
   if (v != null) {
-    const r = v / cap - 1;
+    const r = v / h.start - 1;
     $("pf-value").innerHTML = `${eur(v)} ${st.quote}<small class="${cls(r)}">${pct(r)}</small>`;
   }
-  $("pf-sub").textContent = `${eur(cap, 0)} ${st.quote} (palier ${st.capital.tier}) répartis au signal du ${frDate(sg.date)}, valorisés en direct`;
-  $("pf-alloc").innerHTML = Object.entries(sg.weights).map(([s, w]) => {
-    const p = S.px[s], r = p ? p / sg.closes[s] - 1 : null;
+  $("pf-sub").textContent = pp
+    ? `Démarré le ${new Date(pp.started_ms).toLocaleDateString("fr-FR")} avec ${eur(+pp.capital)} ${st.quote} · jour ${pp.days} / ${pp.min_days} avant de conclure`
+    : `${eur(h.start, 0)} ${st.quote} (palier ${st.capital.tier}) répartis au signal du ${frDate(st.signal.date)}, valorisés en direct`;
+  const rows = Object.entries(h.qty).filter(([, q]) => q > 0).map(([s, q]) => {
+    const val = S.px[s] ? q * S.px[s] : null, w = v && val != null ? val / v : 0;
     return `<div class="alloc-row"><span>${base(s)}</span><span class="track"><i style="width:${(w * 100).toFixed(1)}%"></i></span>
-      <span class="${w ? cls(r) : "mute"}" style="text-align:right">${w ? pct(r) : "cash"}</span></div>`;
-  }).join("") + `<div class="alloc-row mute"><span>${st.quote}</span><span class="track"><i style="width:${((1 - sum(sg.weights)) * 100).toFixed(1)}%;background:var(--faint)"></i></span><span style="text-align:right">${pct(1 - sum(sg.weights), 0).replace("+", "")}</span></div>`;
+      <span style="text-align:right">${val == null ? "…" : eur(val)}</span></div>`;
+  });
+  const cw = v ? h.cash / v : 1;
+  rows.push(`<div class="alloc-row mute"><span>${st.quote}</span><span class="track"><i style="width:${(cw * 100).toFixed(1)}%;background:var(--faint)"></i></span><span style="text-align:right">${eur(h.cash)}</span></div>`);
+  const next = pp && pp.next_rebalance_bar_ms;
+  const when = next ? `<div class="gnote">Prochain rééquilibrage : barre du ${frMs(next)}, exécuté le ${frMs(next + 864e5)} à 00:05 UTC.</div>` : "";
+  $("pf-alloc").innerHTML = rows.join("") + when;
 }
 const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
 const frDate = (iso) => iso.split("-").reverse().join("/");
+const frMs = (ms) => new Date(ms).toISOString().slice(0, 10).split("-").reverse().join("/");
 
 /* ---------- Garde-fous ---------- */
 function gauge(label, valueText, frac, s, note) {
@@ -502,20 +535,55 @@ function gauge(label, valueText, frac, s, note) {
 const level = (f) => f >= 1 ? "bad" : f >= 0.6 ? "warn" : "ok";
 function renderRisk() {
   const st = S.state; if (!st) return;
-  const rk = st.risk, out = [];
+  const rk = st.risk, pp = st.paper, out = [];
   const open = pfValue(S.dayOpen), now = pfValue(S.px);
   const day = open && now ? now / open - 1 : null, dayF = day == null ? 0 : Math.max(0, -day) / rk.max_day_loss_frac;
   out.push(gauge("Résultat du jour", day == null ? "—" : pct(day), dayF, level(dayF), `coupure à −${(rk.max_day_loss_frac * 100).toFixed(0)} % depuis 00:00 UTC`));
-  const n = Object.values(st.signal.weights).filter((w) => w > 0).length, nF = n / rk.max_open_positions;
+  let ddF = 0;
+  if (pp && now != null) {
+    const peak = Math.max(+pp.capital, ...pp.equity.map(([, v]) => +v), now), dd = now / peak - 1;
+    ddF = Math.max(0, -dd) / rk.max_drawdown_frac;
+    out.push(gauge("Drawdown du paper", pct(dd), ddF, level(ddF), `coupure à −${(rk.max_drawdown_frac * 100).toFixed(0)} % depuis le plus haut (${eur(peak)} ${st.quote})`));
+  }
+  const n = pp ? Object.keys(pp.held).length : Object.values(st.signal.weights).filter((w) => w > 0).length, nF = n / rk.max_open_positions;
   out.push(gauge("Positions ouvertes", `${n} / ${rk.max_open_positions}`, nF, nF > 1 ? "bad" : "ok", "cible refusée au-delà"));
-  const age = (nowSrv() - st.signal.close_ms) / 3600e3, ageF = age / rk.max_bar_age_hours;
-  out.push(gauge("Âge de la dernière barre locale", `${age.toFixed(0)} h`, ageF, level(ageF),
-    ageF >= 1 ? `au-delà de ${rk.max_bar_age_hours} h, le paper suspendrait : mettre à jour les klines 1j` : `suspension au-delà de ${rk.max_bar_age_hours} h`));
-  $("gauges").innerHTML = out.join("") + `<div class="gnote">Drawdown : coupure à −${(rk.max_drawdown_frac * 100).toFixed(0)} % depuis le plus haut, suivi par le paper trading.</div>`;
-  const worst = [dayF >= 1 || nF > 1 ? "bad" : "", ageF >= 1 ? "warn" : ""].find(Boolean);
+  let ageF = 0;
+  if (pp && pp.recent.length) {
+    const age = (nowSrv() - (pp.recent[0].bar_ms + 864e5)) / 3600e3; ageF = age / rk.max_bar_age_hours;
+    out.push(gauge("Dernier passage du paper", `il y a ${age.toFixed(0)} h`, ageF, level(ageF),
+      ageF >= 1 ? "passage manqué : vérifier le minuteur qlab-paper (PC éteint ?)" : `alerte au-delà de ${rk.max_bar_age_hours} h`));
+  } else if (!pp) {
+    const age = (nowSrv() - st.signal.close_ms) / 3600e3; ageF = age / rk.max_bar_age_hours;
+    out.push(gauge("Âge de la dernière barre locale", `${age.toFixed(0)} h`, ageF, level(ageF), `suspension au-delà de ${rk.max_bar_age_hours} h`));
+  }
+  $("gauges").innerHTML = out.join("") + (pp ? "" : `<div class="gnote">Drawdown : coupure à −${(rk.max_drawdown_frac * 100).toFixed(0)} % depuis le plus haut, suivi par le paper trading.</div>`);
+  const worst = pp && pp.halted ? "bad" : [dayF >= 1 || ddF >= 1 || nF > 1 ? "bad" : "", ageF >= 1 ? "warn" : ""].find(Boolean);
   const tag = $("risk-tag");
   tag.className = "tag " + (worst === "bad" ? "bad" : worst === "warn" ? "sim" : "on");
   tag.textContent = worst === "bad" ? "couper" : worst === "warn" ? "suspendre" : "trader";
+}
+
+/* ---------- Journal du paper ---------- */
+const ACTIONS = { trade: "trader", suspend: "suspendre", flatten: "couper" };
+function renderJournal() {
+  const pp = S.state && S.state.paper;
+  $("journal-card").hidden = !pp; if (!pp) return;
+  const q = S.state.quote;
+  $("journal-meta").textContent = `${pp.equity.length} passage(s) · ${pp.missed_bars} barre(s) manquée(s)`;
+  $("journal").innerHTML = pp.recent.length ? pp.recent.map((r) => `<tr><td>${frMs(r.bar_ms)}</td><td>${eur(+r.value)} ${q}</td>
+      <td class="${r.action === "trade" ? "" : r.action === "flatten" ? "down" : "warn"}" title="${r.reasons.join(" ; ")}">${ACTIONS[r.action] || r.action}</td>
+      <td class="orders">${r.orders.length ? r.orders.join("<br>") : '<span class="mute">aucun</span>'}</td></tr>`).join("")
+    : `<tr><td colspan="4" class="mute">Aucun passage encore : le premier a lieu chaque jour à 00:05 UTC (02:05 à Paris l'été).</td></tr>`;
+  drawEquity(pp.equity.map(([, v]) => +v), +pp.capital);
+}
+function drawEquity(values, start) {
+  const c = $("equity"), g = c.getContext("2d"), w = c.width, h = c.height, pad = 8;
+  g.clearRect(0, 0, w, h);
+  const a = [start, ...values]; if (a.length < 2) { g.fillStyle = css("--faint"); g.font = "22px JetBrains Mono, monospace"; g.fillText("courbe après le premier passage", pad, h / 2); return; }
+  const lo = Math.min(...a), hi = Math.max(...a), y = (v) => h - pad - (hi === lo ? .5 : (v - lo) / (hi - lo)) * (h - 2 * pad), x = (i) => pad + i / (a.length - 1) * (w - 2 * pad);
+  g.strokeStyle = css("--line-2"); g.setLineDash([6, 6]); g.beginPath(); g.moveTo(pad, y(start)); g.lineTo(w - pad, y(start)); g.stroke(); g.setLineDash([]);
+  const col = a[a.length - 1] >= start ? css("--up") : css("--down");
+  g.beginPath(); a.forEach((v, i) => i ? g.lineTo(x(i), y(v)) : g.moveTo(x(i), y(v))); g.lineWidth = 3; g.strokeStyle = col; g.stroke();
 }
 
 /* ---------- Signal (momentum) ---------- */
@@ -560,10 +628,11 @@ function renderSystem() {
     row(`Minuteur ${name}`, t.next ? `dans ${ago(t.next - now)} · il y a ${t.last ? ago(now - t.last) : "—"}` : "arrêté", t.next && !late ? "" : "down");
   });
   const snapAge = now - st.snapshot.fetched_ms;
-  row("Snapshot des règles", `il y a ${ago(snapAge)}`, snapAge > 36 * 3600e3 ? "warn" : "");
+  row("Règles d'ordre (dernier changement)", `il y a ${ago(snapAge)}`);
   const sp = st.spreads;
   row("Relevés de spread", `${sp.samples} (min ${sp.min_samples})`, sp.samples < sp.min_samples ? "warn" : "");
-  row("Dernière clôture locale", frDate(st.signal.date), (now - st.signal.close_ms) / 3600e3 > st.risk.max_bar_age_hours ? "warn" : "");
+  row("Archives de bougies jusqu'au", frDate(st.signal.date), !st.paper && (now - st.signal.close_ms) / 3600e3 > st.risk.max_bar_age_hours ? "warn" : "");
+  row("Paper trading", st.paper ? `jour ${st.paper.days} / ${st.paper.min_days}${st.paper.halted ? " · arrêt" : ""}` : "pas démarré", st.paper && st.paper.halted ? "down" : "");
   row("Essais comptés (DSR)", `N = ${st.trials.n}`);
   row("Disque", `${(st.disk.used / 1e9).toFixed(1).replace(".", ",")} Go / ${(st.disk.total / 1e9).toFixed(0)} Go`);
   $("sys").innerHTML = rows.join("");

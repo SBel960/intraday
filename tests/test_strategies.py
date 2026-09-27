@@ -118,3 +118,11 @@ def _write_funding(paths: DataPaths, symbol: str, days: int) -> None:
     rows = "\n".join(f"{T0 + k * 8 * 3_600_000 + 1},8,0.0001" for k in range(3 * days))
     with zipfile.ZipFile(path, "w") as z:
         z.writestr("f.csv", "calc_time,funding_interval_hours,last_funding_rate\n" + rows + "\n")
+
+
+def test_trial_by_name() -> None:
+    h, params = st.trial_by_name(FICHES, "lt_ts_momentum · lookback_days=30")
+    assert (h.id, params) == ("lt_ts_momentum", {"lookback_days": 30.0})
+    assert st.trial_name(h, params) == "lt_ts_momentum · lookback_days=30"
+    with pytest.raises(DataError, match="essai inconnu"):
+        st.trial_by_name(FICHES, "lt_ts_momentum · lookback_days=31")
