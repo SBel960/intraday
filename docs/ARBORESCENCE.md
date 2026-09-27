@@ -121,7 +121,7 @@ intraday/
 │   │   ├── risk.py                trader / suspendre (barre absente ou périmée, drapeau) / couper verrouillé (perte d'un jour, drawdown hors enveloppe du backtest, drapeau) ; cibles ≤ max positions ; drapeaux externes (phase 9)
 │   │   ├── cockpit.py             cockpit local en direct (127.0.0.1) : sert cockpit.html et l'état de qlab (signal de l'essai suivi, fraîcheur, spreads, minuteurs, limites) ; aucun ordre, aucune clé
 │   │   ├── cockpit.html           page du cockpit : prix, bougies, transactions et spreads reçus par le navigateur des flux publics de l'échange (seule sortie réseau hors core/http.py, côté navigateur)
-│   │   ├── broker.py              interface d'ordres ; live impossible sans flag explicite + clé sans retrait vérifiée
+│   │   ├── broker.py              interface d'ordres (Broker) ; PaperBroker = exécution du backtest (test d'identité) ; réel toujours refusé : liste ce qui manque (flag, clé trading spot seul sans retrait ni transfert, IP) puis « non écrite »
 │   │   └── paper.py               paper trading sur flux live, journal complet de chaque décision
 │   ├── events/                    phase 9 : informations hors marché (annonces, calendrier, actualité)
 │   │   ├── calendar.py            événements programmés (Fed, inflation US…) : fenêtres sans nouvelle position
@@ -229,7 +229,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 44 bis | 3 · Long terme | `longterm/lt_wave.py` (+ `signals.equal_weight`, `strategies.multi_asset` et `breadth_lengths`, config `acceptance` ; spreads mesurés, essais déjà jugés gardés) | validé |
 | 45 | 4 · Paper LT | `live/risk.py` (+ config `longterm.risk` : enveloppe du backtest du candidat) | validé |
 | 45b | 4 · Paper LT | `live/cockpit.py` + `live/cockpit.html` (demandé le 2026-09-27, hors plan initial) | validé |
-| 46 | 4 · Paper LT | `live/broker.py` | à faire |
+| 46 | 4 · Paper LT | `live/broker.py` | validé |
 | 47 | 4 · Paper LT | `live/paper.py` | à faire |
 
 **Phase 9 — Événements (informations hors marché), après le paper LT.** Décidée le 2026-09-25 : le projet ne regarde aujourd'hui que des chiffres de marché ; un tweet, une annonce de la Fed ou un piratage n'entrent dans aucun calcul, et le kill switch ne voit que leurs conséquences sur les prix. Usage prévu d'abord pour le **risque** (ne pas être exposé au mauvais moment), et seulement ensuite, éventuellement, comme signal (fiche d'hypothèse, essai compté dans le DSR, cost gate). Règles à respecter :
