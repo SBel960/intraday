@@ -8,6 +8,7 @@ dans `$DATA_ROOT/logs/`.
 | `qlab-exchange-info.timer` → `.service` | chaque heure : `exchange_info fetch --if-due` (nouveau snapshot si le dernier a plus de `snapshot_refresh_hours`) |
 | `qlab-spreads.timer` → `.service` | chaque heure : `spreads sample` (un relevé `bookTicker` des paires EUR et tradées, dans `meta/spreads.jsonl`) |
 | `qlab-cockpit.service` | permanent : cockpit local sur http://localhost:8765 (`live.cockpit`, visible de ce PC seulement), relancé en cas d'échec |
+| `qlab-archives.timer` → `.service` | chaque jour à 06:00 UTC : `archives sync` puis `klines_build build` des paires tradées (BTCEUR, ETHEUR, SOLEUR) ; alimente le contrôle « fidélité des données » de `live.paper_report` |
 | `qlab-paper.timer` → `.service` | chaque jour à 00:05 UTC : `live.paper run` (une décision sur la barre close, journal `meta/paper/{book}.jsonl`) ; portefeuille ouvert une fois à la main par `start` |
 
 ## Installer / activer
@@ -16,10 +17,11 @@ dans `$DATA_ROOT/logs/`.
 mkdir -p ~/.config/systemd/user
 ln -sf ~/intraday/ops/qlab-exchange-info.service ~/intraday/ops/qlab-exchange-info.timer ~/.config/systemd/user/
 ln -sf ~/intraday/ops/qlab-spreads.service ~/intraday/ops/qlab-spreads.timer ~/.config/systemd/user/
+ln -sf ~/intraday/ops/qlab-archives.service ~/intraday/ops/qlab-archives.timer ~/.config/systemd/user/
 ln -sf ~/intraday/ops/qlab-paper.service ~/intraday/ops/qlab-paper.timer ~/.config/systemd/user/
 ln -sf ~/intraday/ops/qlab-cockpit.service ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now qlab-exchange-info.timer qlab-spreads.timer qlab-paper.timer qlab-cockpit.service
+systemctl --user enable --now qlab-exchange-info.timer qlab-spreads.timer qlab-archives.timer qlab-paper.timer qlab-cockpit.service
 ```
 
 ## Alertes téléphone (healthchecks.io)

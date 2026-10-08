@@ -1,0 +1,14 @@
+# Archives Binance des paires tradées + bougies reconstruites : sert au contrôle « fidélité des
+# données » du paper (live/paper_report.py compare le journal REST aux archives).
+# Lancé par qlab-archives.timer ; installation : voir ops/README.md.
+# Paires = symbols.trade de config/base.yaml (à garder alignées à la main).
+[Unit]
+Description=qlab : archives quotidiennes des paires tradées
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/intraday
+ExecStart=%h/.venvs/qlab/bin/python -m qlab.data.archives --config config --dataset klines --symbols BTCEUR,ETHEUR,SOLEUR sync
+ExecStart=%h/.venvs/qlab/bin/python -m qlab.longterm.klines_build --config config build --symbols BTCEUR,ETHEUR,SOLEUR

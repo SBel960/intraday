@@ -1,0 +1,11 @@
+# Chaque jour à 06:00 UTC : l'archive quotidienne de la veille est publiée sur data.binance.vision.
+# Rattrapé au démarrage si le PC était éteint ; une synchro est idempotente.
+[Unit]
+Description=qlab : archives des paires tradées, chaque jour à 06:00 UTC
+
+[Timer]
+OnCalendar=*-*-* 06:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
