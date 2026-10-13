@@ -122,6 +122,7 @@ intraday/
 │   │   ├── risk.py                trader / suspendre (barre absente ou périmée, drapeau) / couper verrouillé (perte d'un jour, drawdown hors enveloppe du backtest, drapeau) ; cibles ≤ max positions ; drapeaux externes (phase 9)
 │   │   ├── cockpit.py             cockpit local en direct (127.0.0.1) : sert cockpit.html et l'état de qlab (signal, spreads, minuteurs, limites, portefeuille du paper rebâti depuis son journal, prochain rééquilibrage) ; aucun ordre, aucune clé
 │   │   ├── cockpit.html           page du cockpit : prix, bougies, transactions et spreads reçus par le navigateur des flux publics de l'échange (seule sortie réseau hors core/http.py, côté navigateur)
+│   │   ├── timing_state.py        résultats du volet timing pour le cockpit (dernier balayage, verdicts, hold-out), lecture seule
 │   │   ├── broker.py              interface d'ordres (Broker) ; PaperBroker = exécution du backtest (test d'identité) ; réel toujours refusé : liste ce qui manque (flag, clé trading spot seul sans retrait ni transfert, IP) puis « non écrite »
 │   │   ├── paper_book.py          une journée de paper sans réseau ni disque : valeur, garde-fous, décision, exécution à l'identique du backtest (test d'identité) ; état rebâti depuis le journal
 │   │   ├── paper.py               commande start / run (00:05 UTC : horloge contrôlée, archives + bougies REST, signal, paper_book.day, journal sous verrou) / status / resume
@@ -274,6 +275,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 76 | 10 · Timing | `timing/portfolio.py` | livré |
 | 77 | 10 · Timing | `timing/scan.py` | livré |
 | 78 | 10 · Timing | `timing/verdict.py` (+ `core/paths.py` : `timing_holdout`) | livré |
+| 78 bis | 10 · Timing | `live/timing_state.py` + carte « Recherche timing » du cockpit (`cockpit.py`, `cockpit.html`) | livré |
 | 79 | 10 · Timing | `live/paper_timing.py` + minuteur (si un candidat passe) | à faire |
 
 Écart au plan de la spec (§2, §3, §9) : les bougies **horaires** suffisent pour les horizons ≥ 1 h ; le gate v1 a déjà montré que ≤ 15 min ne passe pas en spot, et la grille des fiches commence à 1 h. Les bougies 1 min et le gate séparé ne sont faits que si un résultat le demande ; le coût est compté essai par essai (frais, spread mesuré, glissement, financement).

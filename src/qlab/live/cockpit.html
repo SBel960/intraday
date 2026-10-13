@@ -245,6 +245,14 @@ td.orders { text-align: left; white-space: normal; line-height: 1.5; padding-lef
   </article>
 </section>
 
+<section class="journal-row">
+  <article class="card" id="timing-card" hidden>
+    <div class="card-head"><h2>Recherche timing (contrats, long et short)</h2><span class="legend" id="timing-meta">—</span></div>
+    <p class="mute" id="timing-verdict"></p>
+    <div class="scroll"><table><thead><tr><th>#</th><th>Essai</th><th>Paramètres</th><th>Sharpe an.</th><th>Net/an</th><th>Frais/an</th><th>Financement/an</th><th>Investi</th></tr></thead><tbody id="timing"></tbody></table></div>
+  </article>
+</section>
+
 <p class="foot">Prix en direct reçus des flux publics de l'échange, sans clé. Le portefeuille est celui du paper trading
 (journal de qlab) valorisé aux prix du moment ; sans journal, une simulation du signal. Aucun ordre n'est passé depuis
 cette page, et le paper trading n'engage aucun argent.</p>
@@ -283,7 +291,7 @@ async function loadState() {
     S.state = d; S.stateAt = Date.now();
     $("banner").hidden = true;
     if (first) boot();
-    renderSystem(); renderPortfolio(); renderRisk(); renderMomentum(); renderJournal();
+    renderSystem(); renderPortfolio(); renderRisk(); renderMomentum(); renderJournal(); renderTiming();
   } catch (e) {
     $("banner").hidden = false;
     $("banner").textContent = "État qlab indisponible : " + e.message + ". Le serveur local tourne-t-il ? (python -m qlab.live.cockpit)";
@@ -584,6 +592,22 @@ function drawEquity(values, start) {
   g.strokeStyle = css("--line-2"); g.setLineDash([6, 6]); g.beginPath(); g.moveTo(pad, y(start)); g.lineTo(w - pad, y(start)); g.stroke(); g.setLineDash([]);
   const col = a[a.length - 1] >= start ? css("--up") : css("--down");
   g.beginPath(); a.forEach((v, i) => i ? g.lineTo(x(i), y(v)) : g.moveTo(x(i), y(v))); g.lineWidth = 3; g.strokeStyle = col; g.stroke();
+}
+
+/* ---------- Recherche timing ---------- */
+function renderTiming() {
+  const t = S.state && S.state.timing;
+  $("timing-card").hidden = !t; if (!t) return;
+  $("timing-meta").textContent = `balayage du ${t.date} · ${t.n_trials} essais comptés · avant hold-out`;
+  const sign = (v) => v > 0 ? "up" : v < 0 ? "down" : "";
+  $("timing").innerHTML = t.rows.map((r, i) => `<tr><td>${i + 1}</td><td>${r.id.replace("tm_", "")}</td>
+      <td>${Object.entries(r.params).map(([k, v]) => `${k.replace("_h", "")} ${v} h`).join(" · ")}</td>
+      <td class="${sign(r.sharpe)}">${r.sharpe.toFixed(2).replace(".", ",")}</td><td class="${sign(r.net_per_year)}">${pct(r.net_per_year, 1)}</td>
+      <td>${pct(-r.cost_per_year, 1)}</td><td>${pct(-r.funding_per_year, 1)}</td><td>${pct(r.invested, 0).replace("+", "")}</td></tr>`).join("");
+  const v = t.verdicts || [], h = t.holdout;
+  const best = v.map((x) => `${x.id.replace("tm_", "")} (${Object.values(x.params).join("/")}) : ${x.verdict}, DSR ${(+x.dsr).toFixed(2)}`).join(" · ");
+  $("timing-verdict").textContent = (best ? "Verdicts : " + best : "Verdicts : pas encore calculés.")
+    + (h ? ` · Hold-out (${h.name}) : Sharpe ${(+h.strategy.sharpe).toFixed(2)} contre ${(+h.buy_hold.sharpe).toFixed(2)} pour le buy & hold.` : " · Hold-out : pas encore utilisé.");
 }
 
 /* ---------- Signal (momentum) ---------- */

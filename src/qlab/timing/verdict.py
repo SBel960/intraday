@@ -40,7 +40,7 @@ from qlab.research.trials import TrialRegistry
 from qlab.timing import hourly_signals as hs
 from qlab.timing import panel as pn
 from qlab.timing import scan
-from qlab.timing.portfolio import buy_and_hold
+from qlab.timing.portfolio import buy_and_hold, period_returns
 
 VOLET = "timing"
 
@@ -86,6 +86,17 @@ def evidence(
     )
 
 
+def oracle_sharpe(study: scan.Study, horizon_h: int) -> float:
+    """Contrôle anti-fuite (§8) : un « signal » qui connaît le rendement à venir doit donner un
+    Sharpe énorme avec le même moteur et les mêmes coûts ; sinon le pipeline est suspect."""
+    peek = study.panel.select(pn.forward_return(horizon_h).alias("s"))["s"]
+    out = pn.in_sample(
+        period_returns(study.panel, peek, study.book(horizon_h)), study.holdout_ms, horizon_h
+    )
+    r = out["net"].to_numpy()
+    return float(r.mean() / r.std(ddof=1) * np.sqrt(study.periods_per_year(horizon_h)))
+
+
 def timing_criteria(config: QlabConfig, horizon_h: int) -> rr.Criteria:
     """Critères du projet ; longueur des blocs ramenée en périodes de ``horizon_h`` heures."""
     base = criteria(config)
@@ -122,12 +133,18 @@ def _best(ctx: Context, study: scan.Study, fiches: list[Hypothesis]) -> int:
             {"id": hyp.id, "params": row["params"], "verdict": report.verdict, **report.headline}
         )
         print(f"{ev.name} : {report.verdict}", flush=True)
+    oracle = oracle_sharpe(study, int(rows[0]["params"]["horizon_h"])) if rows else float("nan")
+    parts.append(
+        f"Contrôle anti-fuite : signal tricheur (rendement à venir) ⇒ Sharpe {oracle:+.1f}."
+    )
     parts.append(study.spread_note)
     day = date_str(now_ms())
     write_atomic(
         ctx.paths.reports / f"timing_verdict_{day}.md", "\n".join(parts).encode(), overwrite=True
     )
-    blob = json.dumps({"date": day, "verdicts": verdicts}, default=float).encode()
+    blob = json.dumps(
+        {"date": day, "verdicts": verdicts, "oracle_sharpe": oracle}, default=float
+    ).encode()
     write_atomic(ctx.paths.reports / "timing_verdict_latest.json", blob, overwrite=True)
     return 0
 

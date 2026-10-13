@@ -42,6 +42,7 @@ def test_best_writes_full_verdicts(config_dir: Path, tmp_path: Path) -> None:
     assert "dsr" in blob["verdicts"][0]
     text = next(paths.reports.glob("timing_verdict_2*.md")).read_text()
     assert "DSR" in text and "moitié 1" in text
+    assert blob["oracle_sharpe"] > 5  # le tricheur gagne nettement : pas de décalage caché
 
 
 def test_best_needs_a_scan(config_dir: Path, tmp_path: Path) -> None:
