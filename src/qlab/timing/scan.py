@@ -185,7 +185,8 @@ def render(rows: list[dict[str, object]], study: Study, n_trials: int) -> str:
         lines.append(
             f"| {i} | {r['id']} | {params} | {r['sharpe']:+.2f} | {r['net_per_year']:+.1%} | "
             f"{r['gross_per_year']:+.1%} | {r['cost_per_year']:.1%} | "
-            f"{r['funding_per_year']:+.1%} | {r['invested']:.0%} | {r['liquidations']} | {r['start']} |"
+            f"{r['funding_per_year']:+.1%} | {r['invested']:.0%} | {r['liquidations']} | "
+            f"{r['start']} |"
         )
     return "\n".join(lines) + "\n"
 
