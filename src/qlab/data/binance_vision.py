@@ -10,6 +10,8 @@ Jeux de données (clés sous ``data/``) :
 - bougies spot quotidiennes (mois en cours) : ``spot/daily/klines/{SYM}/{iv}/…-YYYY-MM-DD.zip``
 - financement USDⓈ-M mensuel : ``futures/um/monthly/fundingRate/{SYM}/…-YYYY-MM.zip``
 - métriques USDⓈ-M quotidiennes : ``futures/um/daily/metrics/{SYM}/…-YYYY-MM-DD.zip``
+- bougies USDⓈ-M mensuelles / quotidiennes : ``futures/um/{monthly,daily}/klines/{SYM}/{iv}/…``
+  (même format CSV que le spot)
 """
 
 from __future__ import annotations
@@ -29,6 +31,8 @@ SPOT_KLINES_MONTHLY = "data/spot/monthly/klines/"
 SPOT_KLINES_DAILY = "data/spot/daily/klines/"
 UM_FUNDING_MONTHLY = "data/futures/um/monthly/fundingRate/"
 UM_METRICS_DAILY = "data/futures/um/daily/metrics/"
+UM_KLINES_MONTHLY = "data/futures/um/monthly/klines/"
+UM_KLINES_DAILY = "data/futures/um/daily/klines/"
 
 Fetch = Callable[[str], bytes]  # GET → corps (``core/http.get`` en production)
 

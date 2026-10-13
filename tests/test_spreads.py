@@ -82,6 +82,32 @@ def test_cli_sample_and_show(
     assert sp.main(["--config", str(config_dir), "show", "--min-samples", "1"]) == 0
     out = capsys.readouterr().out
     # config de test : devise USDT, paires tradées BTC/ETH/SOL-USDT ; BTCEUR, PEPEEUR hors liste
-    assert "1 spreads relevés sur 3 paires" in out
+    assert "1 spreads relevés (spot)" in out
     assert "BTCUSDT" in out and "2.0000%" in out
     assert json.loads(paths.spreads.read_text().splitlines()[0])["spreads"] == {"BTCUSDT": 0.02}
+
+
+def test_all_symbols_when_no_list() -> None:
+    """``symbols`` absent : toutes les paires de la réponse (contrats USDⓈ-M)."""
+    assert sp.spreads_from(BOOK, None) == pytest.approx(
+        {"BTCEUR": 0.001, "PEPEEUR": 0.02, "ETHBTC": 0.0001 / 0.05005}
+    )
+
+
+def test_cli_um_market_needs_no_snapshot_and_is_stored_apart(
+    config_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Contrats : URL des contrats, toutes les paires, registre à part (le spot reste vide)."""
+    paths = DataPaths(config_dir.parent / "data")
+    seen: list[str] = []
+
+    def fake(url: str, notify: object) -> list[dict[str, str]]:
+        seen.append(url)
+        return [{"symbol": "AAPLUSDT", "bidPrice": "199.9", "askPrice": "200.1"}]
+
+    monkeypatch.setattr(sp, "fetch", fake)
+    for _ in range(2):
+        assert sp.main(["--config", str(config_dir), "--market", "um", "sample"]) == 0
+    assert seen == ["https://fapi.binance.com/fapi/v1/ticker/bookTicker"] * 2
+    assert sp.medians(paths, 2, market="um") == pytest.approx({"AAPLUSDT": 0.001})
+    assert sp.medians(paths, 1) == {}

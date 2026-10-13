@@ -54,6 +54,17 @@ class DataPaths:
         """Relevés de spreads (meilleur prix acheteur / vendeur) : ``exchange/spreads.py``."""
         return self.meta / "spreads.jsonl"
 
+    @property
+    def timing_holdout(self) -> Path:
+        """Registre du hold-out du volet timing : une seule entrée permise
+        (``timing/verdict.py``)."""
+        return self.meta / "timing_holdout.jsonl"
+
+    @property
+    def perp_spreads(self) -> Path:
+        """Relevés de spreads des contrats perpétuels USDⓈ-M (volet timing)."""
+        return self.meta / "perp_spreads.jsonl"
+
     def paper_journal(self, book: str) -> Path:
         """Journal d'un portefeuille de paper trading : ``meta/paper/{book}.jsonl``
         (``live/paper.py`` ; ``book`` : nom tiré de l'essai suivi)."""
@@ -82,7 +93,7 @@ class DataPaths:
 
     def lt_futures(self, dataset: str, symbol: str) -> Path:
         """Séries des contrats USDⓈ-M d'une paire : ``lt/futures/{dataset}/{symbol}.parquet``
-        (``dataset`` : ``funding``, ``metrics``)."""
+        (``dataset`` : ``funding``, ``metrics``, ``klines_{intervalle}``)."""
         return self.root / "lt" / "futures" / _name("dataset", dataset) / _symbol_file(symbol)
 
     @property

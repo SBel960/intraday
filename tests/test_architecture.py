@@ -28,6 +28,7 @@ LAYERS = {
     "longterm": 4,
     "backtest": 4,
     "events": 4,
+    "timing": 4,
     "live": 5,
 }
 MAX_LINES = 300

@@ -4,11 +4,16 @@ de bougies construites à la main."""
 from __future__ import annotations
 
 import hashlib
+import math
 import urllib.parse
 import zipfile
 from pathlib import Path
 
+import polars as pl
+import yaml
+
 from qlab.core.paths import DataPaths
+from qlab.core.timeutils import MS_PER_HOUR, date_to_ms
 
 NS = "http://s3.amazonaws.com/doc/2006-03-01/"
 
@@ -178,3 +183,59 @@ def kline_archive(
     with zipfile.ZipFile(path, "w") as z:
         z.writestr(f"{name}.csv", data)
     return path
+
+
+# --- volet timing --------------------------------------------------------------------------
+
+TIMING_T0 = date_to_ms("2024-05-01")
+TIMING_HOURS = 41 * 24  # jusqu'au 2024-06-11 ; hold-out de la config de test : 2024-06-01
+
+
+def timing_fiche(folder: Path, ident: str, horizons: list[int]) -> Path:
+    data = {
+        "id": ident,
+        "title": "essai de test",
+        "volet": "timing",
+        "created": "2026-10-14",
+        "mechanism": "Mécanisme de test suffisamment long pour passer la validation.",
+        "horizon_s": 3600,
+        "universe": "perp",
+        "features": ["close_1h"],
+        "parameters": [
+            {"name": "lookback_h", "values": [2]},
+            {"name": "horizon_h", "values": horizons},
+        ],
+        "cost_round_trip_frac": 0.002,
+        "min_edge_frac": 0.1,
+        "edge_basis": "per_year",
+        "abandon": "test",
+    }
+    path = folder / f"{ident}.yaml"
+    path.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    return path
+
+
+def timing_market(paths: DataPaths) -> None:
+    """4 contrats ; A suit une onde, B l'onde opposée, C plat, BTC en légère hausse."""
+    wave = [0.01 * math.sin(i / 5) for i in range(TIMING_HOURS)]
+    paths_by_symbol = {
+        "BTCUSDT": [100 * (1 + 0.0001 * i) for i in range(TIMING_HOURS)],
+        "AUSDT": [100 * (1 + w) for w in wave],
+        "BUSDT": [100 * (1 - w) for w in wave],
+        "CUSDT": [100.0] * TIMING_HOURS,
+    }
+    for sym, price in paths_by_symbol.items():
+        df = pl.DataFrame(
+            {
+                "open_time_ms": [TIMING_T0 + i * MS_PER_HOUR for i in range(TIMING_HOURS)],
+                "open": price,
+                "high": price,
+                "low": price,
+                "close": price,
+                "volume_quote": [100.0] * TIMING_HOURS,
+                "taker_buy_quote": [50.0] * TIMING_HOURS,
+            }
+        )
+        out = paths.lt_futures("klines_1h", sym)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        df.write_parquet(out)

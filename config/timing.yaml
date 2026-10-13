@@ -1,0 +1,28 @@
+# Volet timing (docs/SPEC_TIMING.md) : contrats perpétuels USDⓈ-M, long et short à levier ≤ 1×.
+# Recherche et paper uniquement. Suffixes : _h heures, _frac fraction, _quote USDT, _days jours.
+
+futures_rest_url: https://fapi.binance.com
+quote_asset: USDT
+reference_symbol: BTCUSDT          # rattrapage (btc_catchup) et buy & hold de comparaison
+# Barème public USDⓈ-M VIP 0 (repli) ; remise BNB des contrats : 10 %.
+fees:
+  maker_frac: 0.0002
+  taker_frac: 0.0005
+  bnb_discount_frac: 0.10
+  pay_in_bnb: false
+
+horizons_h: [1, 2, 4, 8, 12, 24, 48, 72]
+min_move_cost_ratio: 3.0             # gate : mouvement médian / coût aller-retour médian
+slippage_frac: 0.0005                # par jambe (même hypothèse que le long terme)
+fallback_spread_frac: 0.001          # sans relevés suffisants (signalé dans les rapports)
+spread_min_samples: 6
+
+# Univers point-in-time : contrats liquides à chaque date (pas de biais du survivant).
+volume_lookback_days: 30
+min_volume_quote: 20000000           # volume quotidien médian ≥ 20 M USDT
+warmup_days: 30
+
+n_long: 3                            # 50 € : 6 lignes de ~8 € (minimum par ordre ~5 USDT)
+n_short: 3
+holdout_start: "2025-10-01"          # 12 derniers mois : touchés une seule fois (candidat final)
+max_trials: 120

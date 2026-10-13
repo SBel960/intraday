@@ -1,0 +1,22 @@
+id: tm_volume_shock
+title: Mouvement accompagné d'un volume anormal (continuation)
+volet: timing
+created: "2026-10-14"
+mechanism: >-
+  Un mouvement de prix porté par un volume très supérieur à la normale traduit une nouvelle information ou l'entrée d'acteurs importants, plutôt que du bruit : il a plus de chances de continuer qu'un mouvement sans volume.
+horizon_s: 86400
+universe: perp
+features: [close_1h, volume_quote_1h]
+parameters:
+  - name: lookback_h
+    values: [1, 4, 24]
+  - name: horizon_h
+    values: [4, 24]
+cost_round_trip_frac: 0.0022        # 2 jambes taker : 0,05 % + ½ spread + 0,05 % de glissement
+min_edge_frac: 0.10                 # 10 %/an net, après frais et financement
+edge_basis: per_year
+abandon: >-
+  Abandon si DSR < 0,95 sur tous les essais du volet, si l'écart de Sharpe avec le buy & hold
+  n'a pas un IC bootstrap à 95 % strictement positif, ou si le résultat ne tient pas sur 3
+  sous-périodes et sur les deux moitiés de l'univers. Le hold-out (depuis 2025-10-01) n'est lu
+  qu'une fois, pour le meilleur candidat.

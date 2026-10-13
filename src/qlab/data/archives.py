@@ -12,7 +12,9 @@ Ce qui est synchronisé (config) :
 - bougies spot mensuelles de **toutes** les paires (``observe.kline_intervals``), retirées
   comprises si ``observe.include_delisted`` ; + quotidiennes du mois en cours ;
 - si ``observe.futures_metrics`` : financement USDⓈ-M mensuel de toutes les paires, métriques
-  quotidiennes des paires ``archives.futures_metrics_symbols``.
+  quotidiennes des paires ``archives.futures_metrics_symbols`` ;
+- jeu ``um_klines`` : bougies USDⓈ-M de tous les contrats (mêmes intervalles), mensuelles + mois
+  en cours (volet timing : seul support qui permet la vente à découvert).
 
 Commande : ``python -m qlab.data.archives --config config sync [--dataset …] [--symbols A,B]
 [--dry-run]``
@@ -38,7 +40,7 @@ from qlab.data import binance_vision as bv
 from qlab.exchange.snapshots import SnapshotStore
 
 SOURCE = "binance_vision"
-DATASETS = ("klines", "funding", "metrics")
+DATASETS = ("klines", "funding", "metrics", "um_klines")
 Fetch = Callable[[str], bytes]
 
 
@@ -65,14 +67,21 @@ def archive_prefixes(
     def keep(sym: str) -> bool:
         return (symbols is None or sym in symbols) and (trading is None or sym in trading)
 
+    def klines(monthly: str, daily: str, current: set[str] | None) -> list[str]:
+        """Mensuelles de chaque paire ; quotidiennes du mois en cours si ``current`` l'admet."""
+        out = []
+        for sym in filter(keep, bv.list_subdirs(fetch, list_url, monthly)):
+            for iv in intervals:
+                out.append(f"{monthly}{sym}/{iv}/")
+                if current is None or sym in current:
+                    out.append(f"{daily}{sym}/{iv}/{sym}-{iv}-{today[:7]}")
+        return out
+
     prefixes: list[str] = []
     if "klines" in datasets:
-        month = today[:7]
-        for sym in filter(keep, bv.list_subdirs(fetch, list_url, bv.SPOT_KLINES_MONTHLY)):
-            for iv in intervals:
-                prefixes.append(f"{bv.SPOT_KLINES_MONTHLY}{sym}/{iv}/")
-                if active is None or sym in active:
-                    prefixes.append(f"{bv.SPOT_KLINES_DAILY}{sym}/{iv}/{sym}-{iv}-{month}")
+        prefixes += klines(bv.SPOT_KLINES_MONTHLY, bv.SPOT_KLINES_DAILY, active)
+    if "um_klines" in datasets:  # le snapshot exchangeInfo est celui du spot : tout lister
+        prefixes += klines(bv.UM_KLINES_MONTHLY, bv.UM_KLINES_DAILY, None)
     if "funding" in datasets:
         for sym in filter(keep, bv.list_subdirs(fetch, list_url, bv.UM_FUNDING_MONTHLY)):
             prefixes.append(f"{bv.UM_FUNDING_MONTHLY}{sym}/")

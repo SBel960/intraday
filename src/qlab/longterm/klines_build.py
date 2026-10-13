@@ -1,13 +1,14 @@
 """Construction de ``lt/klines_{intervalle}/{paire}.parquet`` depuis ``raw/binance_vision``.
 
 Toutes les paires présentes sur disque (retirées comprises), chaque intervalle de
-``observe.kline_intervals`` ; format et contrôle qualité : ``longterm/klines.py``. Une paire déjà
-construite n'est refaite que si une archive est plus récente que sa sortie (ou ``--force``,
-après un changement du format). Une archive
-illisible arrête sa paire, pas les autres : l'erreur est rapportée et le code de sortie vaut 1.
+``observe.kline_intervals`` ; marché ``spot`` (défaut) ou ``um`` (contrats USDⓈ-M, sortie
+``lt/futures/klines_{intervalle}/``, volet timing) ; format et contrôle qualité :
+``longterm/klines.py``. Une paire déjà construite n'est refaite que si une archive est plus
+récente que sa sortie (ou ``--force``, après un changement du format). Une archive illisible
+arrête sa paire, pas les autres : l'erreur est rapportée et le code de sortie vaut 1.
 
 Commande : ``python -m qlab.longterm.klines_build --config config build [--symbols A,B]
-[--intervals 1d,1h]``
+[--intervals 1d,1h] [--market spot|um]``
 """
 
 from __future__ import annotations
@@ -30,20 +31,33 @@ from qlab.data import binance_vision as bv
 from qlab.data.archives import SOURCE
 from qlab.longterm.klines import gaps, interval_to_ms, merge, read_archive
 
+# Marché → (préfixe des mensuelles, préfixe des quotidiennes), ordre de priorité.
+PREFIXES = {
+    "spot": (bv.SPOT_KLINES_MONTHLY, bv.SPOT_KLINES_DAILY),
+    "um": (bv.UM_KLINES_MONTHLY, bv.UM_KLINES_DAILY),
+}
 
-def _archives(paths: DataPaths, symbol: str, interval: str) -> list[Path]:
+
+def output_path(paths: DataPaths, market: str, interval: str, symbol: str) -> Path:
+    """Spot : ``lt/klines_{iv}/`` ; USDⓈ-M : ``lt/futures/klines_{iv}/``."""
+    if market == "spot":
+        return paths.lt_klines(interval, symbol)
+    return paths.lt_futures(f"klines_{interval}", symbol)
+
+
+def _archives(paths: DataPaths, symbol: str, interval: str, market: str) -> list[Path]:
     """Mensuelles triées, puis quotidiennes triées (ordre de priorité)."""
     found = []
-    for prefix in (bv.SPOT_KLINES_MONTHLY, bv.SPOT_KLINES_DAILY):
+    for prefix in PREFIXES[market]:
         key = f"{prefix.removeprefix('data/')}{symbol}/{interval}"
         folder = paths.raw_archive(SOURCE, key)
         found += sorted(folder.glob("*.zip")) if folder.is_dir() else []
     return found
 
 
-def symbols_on_disk(paths: DataPaths) -> list[str]:
+def symbols_on_disk(paths: DataPaths, market: str = "spot") -> list[str]:
     names: set[str] = set()
-    for prefix in (bv.SPOT_KLINES_MONTHLY, bv.SPOT_KLINES_DAILY):
+    for prefix in PREFIXES[market]:
         folder = paths.raw_archive(SOURCE, prefix.removeprefix("data/").rstrip("/"))
         names |= {p.name for p in folder.iterdir() if p.is_dir()} if folder.is_dir() else set()
     return sorted(names)
@@ -63,11 +77,11 @@ class BuildResult:
 
 
 def build_symbol(
-    paths: DataPaths, symbol: str, interval: str, *, force: bool = False
+    paths: DataPaths, symbol: str, interval: str, *, force: bool = False, market: str = "spot"
 ) -> BuildResult:
     step = interval_to_ms(interval)
-    out = paths.lt_klines(interval, symbol)
-    archives = _archives(paths, symbol, interval)
+    out = output_path(paths, market, interval, symbol)
+    archives = _archives(paths, symbol, interval, market)
     if not archives:
         return BuildResult(symbol, interval, "vide")
     newest = max(a.stat().st_mtime for a in archives)
@@ -90,10 +104,12 @@ def build_symbol(
     )
 
 
-def _build_or_report(paths: DataPaths, symbol: str, interval: str, force: bool) -> BuildResult:
+def _build_or_report(
+    paths: DataPaths, symbol: str, interval: str, force: bool, market: str
+) -> BuildResult:
     """Une archive illisible arrête sa paire, pas les milliers d'autres : erreur rapportée."""
     try:
-        return build_symbol(paths, symbol, interval, force=force)
+        return build_symbol(paths, symbol, interval, force=force, market=market)
     except DataError as e:
         return BuildResult(symbol, interval, "erreur", error=str(e))
 
@@ -104,6 +120,7 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
     build.add_argument("--symbols", help="paires, ex. BTCEUR,ETHEUR ; défaut : toutes")
     build.add_argument("--intervals", help="ex. 1d ; défaut : observe.kline_intervals")
     build.add_argument("--force", action="store_true", help="reconstruire même les paires à jour")
+    build.add_argument("--market", choices=sorted(PREFIXES), default="spot")
 
 
 def _summary(done: list[BuildResult]) -> dict[str, JsonValue]:
@@ -127,7 +144,10 @@ def _summary(done: list[BuildResult]) -> dict[str, JsonValue]:
 
 def _action(ctx: Context) -> int:
     args = ctx.args
-    symbols = symbols_on_disk(ctx.paths) if args.symbols is None else args.symbols.split(",")
+    market = args.market
+    symbols = (
+        symbols_on_disk(ctx.paths, market) if args.symbols is None else args.symbols.split(",")
+    )
     intervals = (
         list(ctx.config.base.observe.kline_intervals)
         if args.intervals is None
@@ -137,14 +157,18 @@ def _action(ctx: Context) -> int:
     with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as pool:
         results = list(
             pool.map(
-                _build_or_report, repeat(ctx.paths), *zip(*tasks, strict=True), repeat(args.force)
+                _build_or_report,
+                repeat(ctx.paths),
+                *zip(*tasks, strict=True),
+                repeat(args.force),
+                repeat(market),
             )
         )
     for interval in intervals:
         summary = _summary([r for r in results if r.interval == interval])
         shown = {k: v for k, v in summary.items() if k != "suspects"}
         print(f"{interval} : " + ", ".join(f"{k} {v}" for k, v in shown.items()))
-        ctx.journal.info("klines.build", {"interval": interval, **summary})
+        ctx.journal.info("klines.build", {"market": market, "interval": interval, **summary})
     failed = [r for r in results if r.status == "erreur"]
     for r in failed:
         print(f"ERREUR {r.symbol} {r.interval} : {r.error}")

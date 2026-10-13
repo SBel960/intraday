@@ -270,3 +270,19 @@ def test_non_ascii_symbol_downloads_end_to_end(tmp_path: Path) -> None:
     assert (report.downloaded, report.failed) == (1, [])
     local = DataPaths(tmp_path).raw_archive("binance_vision", key.removeprefix("data/"))
     assert local.read_bytes() == b"archive-chinoise"
+
+
+def test_um_klines_monthly_and_current_month() -> None:
+    """Jeu ``um_klines`` : bougies USDⓈ-M mensuelles + quotidiennes du mois en cours seulement."""
+    um = "data/futures/um"
+    content = {
+        f"{um}/monthly/klines/AAPLUSDT/1h/AAPLUSDT-1h-2024-01.zip": b"aapl-janvier",
+        f"{um}/daily/klines/AAPLUSDT/1h/AAPLUSDT-1h-2024-03-01.zip": b"aapl-1er-mars",
+        f"{um}/daily/klines/AAPLUSDT/1h/AAPLUSDT-1h-2024-02-29.zip": b"deja-dans-le-mensuel",
+        f"{M}/BTCUSDT/1h/BTCUSDT-1h-2024-01.zip": b"spot-pas-demande",
+    }
+    keys = [f.key for f in _remote(FakeVision(content), datasets=("um_klines",), intervals=("1h",))]
+    assert keys == [
+        f"{um}/daily/klines/AAPLUSDT/1h/AAPLUSDT-1h-2024-03-01.zip",
+        f"{um}/monthly/klines/AAPLUSDT/1h/AAPLUSDT-1h-2024-01.zip",
+    ]

@@ -1,4 +1,5 @@
-# Relevé des spreads réels (bookTicker) des paires EUR : sert au gate de coûts.
+# Relevé des spreads réels (bookTicker) des paires EUR et de tous les contrats perpétuels
+# USDⓈ-M (volet timing) : sert aux gates de coûts.
 # Lancé par qlab-spreads.timer ; installation : voir ops/README.md.
 [Unit]
 Description=qlab : relevé des spreads (bookTicker)
@@ -9,3 +10,4 @@ After=network-online.target
 Type=oneshot
 WorkingDirectory=%h/intraday
 ExecStart=%h/.venvs/qlab/bin/python -m qlab.exchange.spreads --config config sample
+ExecStart=%h/.venvs/qlab/bin/python -m qlab.exchange.spreads --config config --market um sample

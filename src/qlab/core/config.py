@@ -1,6 +1,7 @@
 """Chargement de la configuration YAML en dataclasses figées et validées.
 
-Trois fichiers dans un dossier : ``base.yaml``, ``intraday.yaml``, ``longterm.yaml``.
+Quatre fichiers dans un dossier : ``base.yaml``, ``intraday.yaml``, ``longterm.yaml``,
+``timing.yaml``.
 Toute clé manquante ou inconnue, tout type incorrect et toute valeur hors domaine lève
 ``ConfigError`` avec le chemin de la clé (ex. ``base.data.root``). Aucune valeur par défaut :
 ce qui n'est pas dans le YAML n'existe pas.
@@ -28,6 +29,7 @@ from qlab.core.yamlschema import SchemaError, build, read_yaml
 BASE_FILE = "base.yaml"
 INTRADAY_FILE = "intraday.yaml"
 LONGTERM_FILE = "longterm.yaml"
+TIMING_FILE = "timing.yaml"
 MINUTES_PER_DAY = 1440
 
 
@@ -564,11 +566,72 @@ class LongtermConfig:
     risk: LtRiskConfig
 
 
+# --- timing.yaml -------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class TimingConfig:
+    """Volet timing (``docs/SPEC_TIMING.md``) : contrats perpétuels USDⓈ-M, long et short à 1×.
+
+    ``futures_rest_url`` : API publique des contrats ; ``quote_asset`` : devise de cotation des
+    contrats étudiés ; ``reference_symbol`` : contrat de référence (signal de rattrapage,
+    buy & hold de comparaison) ; ``fees`` : barème des contrats (repli,
+    pas celui du spot) ; ``horizons_h`` : horizons de détention essayés (heures) ;
+    ``min_move_cost_ratio`` : seuil du gate (mouvement médian / coût) ; ``slippage_frac`` :
+    glissement par jambe ; ``fallback_spread_frac`` : spread supposé sans ``spread_min_samples``
+    relevés ; univers point-in-time : volume quotidien médian sur ``volume_lookback_days``
+    ≥ ``min_volume_quote`` (USDT), après ``warmup_days`` de cotation ; ``n_long`` / ``n_short`` :
+    lignes de chaque côté (50 € et minimum par ordre : peu de lignes) ; ``holdout_start`` :
+    données à partir de cette date (incluse) réservées au candidat final ; ``max_trials`` :
+    budget d'essais du volet."""
+
+    futures_rest_url: str
+    quote_asset: str
+    reference_symbol: str
+    fees: FeesConfig
+    horizons_h: tuple[int, ...]
+    min_move_cost_ratio: float
+    slippage_frac: float
+    fallback_spread_frac: float
+    spread_min_samples: int
+    volume_lookback_days: int
+    min_volume_quote: float
+    warmup_days: int
+    n_long: int
+    n_short: int
+    holdout_start: str
+    max_trials: int
+
+    def __post_init__(self) -> None:
+        _url("futures_rest_url", self.futures_rest_url, "https")
+        _check(
+            self.reference_symbol.endswith(self.quote_asset),
+            f"reference_symbol doit être coté en {self.quote_asset} (reçu {self.reference_symbol})",
+        )
+        _increasing("horizons_h", self.horizons_h)
+        _positive("min_move_cost_ratio", self.min_move_cost_ratio)
+        _non_negative("slippage_frac", self.slippage_frac)
+        _fraction("fallback_spread_frac", self.fallback_spread_frac)
+        _positive("spread_min_samples", self.spread_min_samples)
+        _positive("volume_lookback_days", self.volume_lookback_days)
+        _non_negative("min_volume_quote", self.min_volume_quote)
+        _non_negative("warmup_days", self.warmup_days)
+        _non_negative("n_long", self.n_long)
+        _non_negative("n_short", self.n_short)
+        _check(self.n_long + self.n_short > 0, "n_long + n_short doit être > 0")
+        _check(
+            bool(re.match(r"^\d{4}-\d{2}-\d{2}$", self.holdout_start)),
+            f"holdout_start : date AAAA-MM-JJ attendue (reçu {self.holdout_start!r})",
+        )
+        _positive("max_trials", self.max_trials)
+
+
 @dataclass(frozen=True, slots=True)
 class QlabConfig:
     base: BaseConfig
     intraday: IntradayConfig
     longterm: LongtermConfig
+    timing: TimingConfig
 
 
 def load_base(path: Path) -> BaseConfig:
@@ -583,12 +646,17 @@ def load_longterm(path: Path) -> LongtermConfig:
     return build(LongtermConfig, read_yaml(path, error=ConfigError), "longterm", error=ConfigError)
 
 
+def load_timing(path: Path) -> TimingConfig:
+    return build(TimingConfig, read_yaml(path, error=ConfigError), "timing", error=ConfigError)
+
+
 def load_config(config_dir: Path) -> QlabConfig:
-    """Charge et valide ``base.yaml``, ``intraday.yaml`` et ``longterm.yaml`` de ``config_dir``."""
+    """Charge et valide les quatre fichiers de ``config_dir``."""
     return QlabConfig(
         base=load_base(config_dir / BASE_FILE),
         intraday=load_intraday(config_dir / INTRADAY_FILE),
         longterm=load_longterm(config_dir / LONGTERM_FILE),
+        timing=load_timing(config_dir / TIMING_FILE),
     )
 
 

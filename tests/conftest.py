@@ -117,10 +117,34 @@ LONGTERM: dict[str, object] = {
     },
 }
 
+TIMING: dict[str, object] = {
+    "futures_rest_url": "https://fapi.binance.com",
+    "quote_asset": "USDT",
+    "reference_symbol": "BTCUSDT",
+    "fees": {
+        "maker_frac": 0.0002,
+        "taker_frac": 0.0005,
+        "bnb_discount_frac": 0.1,
+        "pay_in_bnb": False,
+    },
+    "horizons_h": [1, 4, 24],
+    "min_move_cost_ratio": 3.0,
+    "slippage_frac": 0.0005,
+    "fallback_spread_frac": 0.001,
+    "spread_min_samples": 2,
+    "volume_lookback_days": 3,
+    "min_volume_quote": 1000.0,
+    "warmup_days": 1,
+    "n_long": 1,
+    "n_short": 1,
+    "holdout_start": "2024-06-01",
+    "max_trials": 50,
+}
+
 
 @pytest.fixture
 def config_dir(tmp_path: Path) -> Path:
-    """Écrit base/intraday/longterm.yaml valides ; la racine des données est ``tmp_path/data``."""
+    """Écrit les quatre YAML valides ; la racine des données est ``tmp_path/data``."""
     cfg = tmp_path / "config"
     cfg.mkdir()
     base = {
@@ -128,6 +152,11 @@ def config_dir(tmp_path: Path) -> Path:
         "data": {**BASE["data"], "root": str(tmp_path / "data")},  # type: ignore[dict-item]
         "secrets_file": str(tmp_path / "secrets.env"),  # absent par défaut : frais de repli
     }
-    for name, content in (("base", base), ("intraday", INTRADAY), ("longterm", LONGTERM)):
+    for name, content in (
+        ("base", base),
+        ("intraday", INTRADAY),
+        ("longterm", LONGTERM),
+        ("timing", TIMING),
+    ):
         (cfg / f"{name}.yaml").write_text(yaml.safe_dump(content), encoding="utf-8")
     return cfg

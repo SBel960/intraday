@@ -49,7 +49,8 @@ intraday/
 ├── config/
 │   ├── base.yaml                  racine des données, budget disque, sources, univers tradé (trade) et observé (observe), limites de risque, paliers de capital
 │   ├── intraday.yaml              horizons du gate, latences, fenêtres de features, seuils (fraîcheur, ratio 3)
-│   └── longterm.yaml              lookbacks, bandes de rééquilibrage, DCA (montant, période), vol cible
+│   ├── longterm.yaml              lookbacks, bandes de rééquilibrage, DCA (montant, période), vol cible
+│   └── timing.yaml                volet timing : API et frais des contrats, horizons, univers liquide, lignes long / short, hold-out, budget d'essais
 ├── hypotheses/
 │   ├── _template.yaml             modèle de fiche d'hypothèse (mécanisme, horizon, features, coût, edge min, abandon)
 │   └── lt_*.yaml                  fiches de la vague 1, écrites AVANT tout test (voir « Hypothèses par vagues »)
@@ -129,9 +130,15 @@ intraday/
 │   │   ├── calendar.py            événements programmés (Fed, inflation US…) : fenêtres sans nouvelle position
 │   │   ├── news.py                collecte d'annonces (Binance, GDELT…), horodatées à la RÉCEPTION, RAW append-only
 │   │   └── classify.py            classement des annonces → drapeaux de risque ; modèle et prompt versionnés
+│   ├── timing/                    phase 10 : meilleur moment d'achat / vente sur les contrats perpétuels (long et short à 1×)
+│   │   ├── panel.py               panel horaire de tous les contrats : grille complète (trous marqués), financement par heure, univers liquide point-in-time, rendements futurs (contrat retiré soldé au dernier prix)
+│   │   ├── hourly_signals.py      10 signaux horaires orientés et causaux (momentum, retour, flux acheteur, choc de volume, financement, rattrapage de BTC, cassure, faible volatilité, saisonnalité)
+│   │   ├── portfolio.py           n_long meilleurs / n_short pires toutes les h heures, poids égaux, levier 1× ; rendements nets (frais taker, ½ spread, glissement, financement)
+│   │   ├── scan.py                balayage des fiches hypotheses/timing (budget vérifié avant), essais comptés, classement avant hold-out, rapport + JSON
+│   │   └── verdict.py             critères complets (DSR, écart de Sharpe vs buy & hold, années, moitiés d'univers, MinTRL) des meilleurs ; hold-out rejoué une seule fois
 │   └── longterm/
 │       ├── klines.py              lecture des archives (ms/µs ligne par ligne), contrôle qualité, bougies tronquées marquées, trous
-│       ├── klines_build.py        construction de lt/klines_{1d|1h}/{paire}.parquet, reprise, erreurs isolées par paire
+│       ├── klines_build.py        construction de lt/klines_{1d|1h}/{paire}.parquet (spot) ou lt/futures/klines_{iv}/ (contrats, --market um), reprise, erreurs isolées par paire
 │       ├── klines_rest.py         dernières bougies par l'API REST (paper) : même contrôle qualité que les archives, closes / en cours (ouverture = prix d'exécution), raccord (l'archive fait foi)
 │       ├── universe.py            univers point-in-time : tradé (chauffe) et observé (1 paire en dollar par actif, stablecoins et tokens à levier exclus, volume médian 30 j ≥ 1 M$)
 │       ├── funding.py             taux de financement USDⓈ-M → lt/futures/funding/{contrat}.parquet (heure exacte, intervalle lu par ligne), somme par jour
@@ -252,6 +259,24 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 49 | 9 · Événements | `events/calendar.py` | à faire |
 | 50 | 9 · Événements | `events/news.py` | à faire |
 | 51 | 9 · Événements | `events/classify.py` | à faire |
+
+**Phase 10 — Timing (meilleur moment d'achat et de vente), décidée le 2026-10-14.** Long et short (perpétuels USDⓈ-M à 1×), horizon libre de 5 min à 72 h, recherche et paper uniquement ; spécification : `docs/SPEC_TIMING.md`.
+
+| # | Phase | Fichier | Statut |
+|---|---|---|---|
+| 70 | 10 · Timing | `docs/SPEC_TIMING.md` (spécification) | validé d'office (« pas besoin que je valide », 2026-10-14) |
+| 71 | 10 · Timing | `data/binance_vision.py` + `data/archives.py` (jeu `um_klines`) + `longterm/klines_build.py` (`--market um`) + `core/paths.py` (`lt_futures` : `klines_{iv}`) | livré |
+| 71 bis | 10 · Timing | `exchange/spreads.py` (`--market um`, `perp_spreads`) + `ops/qlab-spreads.service` | livré |
+| 72 | 10 · Timing | `core/config.py` + `config/timing.yaml` (`TimingConfig`) | livré |
+| 73 | 10 · Timing | `timing/panel.py` | livré |
+| 74 | 10 · Timing | `timing/hourly_signals.py` | livré |
+| 75 | 10 · Timing | `hypotheses/timing/*.yaml` : 10 fiches, 77 essais, écrites avant tout test (+ volet `timing`, univers `perp` dans `research/hypothesis.py`) | livré (figées) |
+| 76 | 10 · Timing | `timing/portfolio.py` | livré |
+| 77 | 10 · Timing | `timing/scan.py` | livré |
+| 78 | 10 · Timing | `timing/verdict.py` (+ `core/paths.py` : `timing_holdout`) | livré |
+| 79 | 10 · Timing | `live/paper_timing.py` + minuteur (si un candidat passe) | à faire |
+
+Écart au plan de la spec (§2, §3, §9) : les bougies **horaires** suffisent pour les horizons ≥ 1 h ; le gate v1 a déjà montré que ≤ 15 min ne passe pas en spot, et la grille des fiches commence à 1 h. Les bougies 1 min et le gate séparé ne sont faits que si un résultat le demande ; le coût est compté essai par essai (frais, spread mesuré, glissement, financement).
 
 **Volet intraday — conditionnel.** Il ne démarre que si le cost gate v1 trouve un horizon intraday franchissable (par exemple grâce à un palier de frais plus bas ou à l'exécution maker). Sinon, il reste en attente et le rapport du gate le dit.
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -76,3 +77,23 @@ def test_broken_archive_stops_its_pair_only(
     assert paths.lt_klines("1d", "BTCEUR").exists()
     with pytest.raises(DataError, match="non géré"):
         kb.build_symbol(paths, "BTCEUR", "4h")
+
+
+def test_um_market_reads_futures_archives_and_writes_apart(tmp_path: Path) -> None:
+    """Marché ``um`` : archives ``futures/um/…``, sortie ``lt/futures/klines_1d/`` ; le spot
+    du même nom n'est ni lu ni écrasé."""
+    paths = DataPaths(tmp_path)
+    path = paths.raw_archive(
+        "binance_vision", "futures/um/monthly/klines/AAPLUSDT/1d/AAPLUSDT-1d-2024-12.zip"
+    )
+    path.parent.mkdir(parents=True)
+
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("a.csv", kline_csv(kline_row(T0), kline_row(T0 + D)))
+    assert kb.symbols_on_disk(paths, "um") == ["AAPLUSDT"]
+    assert kb.symbols_on_disk(paths) == []
+    res = kb.build_symbol(paths, "AAPLUSDT", "1d", market="um")
+    assert (res.status, res.bars) == ("construit", 2)
+    assert paths.lt_futures("klines_1d", "AAPLUSDT").exists()
+    assert not paths.lt_klines("1d", "AAPLUSDT").exists()
+    assert kb.build_symbol(paths, "AAPLUSDT", "1d").status == "vide"  # spot : rien

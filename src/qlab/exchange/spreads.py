@@ -10,9 +10,11 @@ l'historique (limite écrite dans les rapports).
   compte (``symbols.quote_asset``) et des paires tradées ; spread relatif
   (ask − bid) / milieu ; carnet vide (bid ou ask nul) ignoré ;
 - ``medians`` : médiane par paire sur les relevés, seulement avec au moins ``min_samples``
-  relevés (sinon la paire garde l'hypothèse de la config).
+  relevés (sinon la paire garde l'hypothèse de la config) ;
+- ``--market um`` : mêmes relevés pour **tous** les contrats perpétuels USDⓈ-M
+  (``timing.futures_rest_url``), rangés à part (``DataPaths.perp_spreads``, volet timing).
 
-Commande : ``python -m qlab.exchange.spreads --config config sample | show``
+Commande : ``python -m qlab.exchange.spreads --config config [--market spot|um] sample | show``
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ import json
 import statistics
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from typing import Any
 
 from qlab.core import http
@@ -33,14 +36,21 @@ from qlab.core.timeutils import now_ms
 from qlab.exchange.snapshots import SnapshotStore
 
 ENDPOINT = "/api/v3/ticker/bookTicker"
+UM_ENDPOINT = "/fapi/v1/ticker/bookTicker"
 
 
-def spreads_from(book: Iterable[Mapping[str, Any]], symbols: set[str]) -> dict[str, float]:
-    """Spread relatif de chaque paire de ``symbols`` présente dans la réponse ``bookTicker``."""
+def store(paths: DataPaths, market: str) -> Path:
+    """Registre des relevés d'un marché (``spot`` ou ``um``)."""
+    return paths.perp_spreads if market == "um" else paths.spreads
+
+
+def spreads_from(book: Iterable[Mapping[str, Any]], symbols: set[str] | None) -> dict[str, float]:
+    """Spread relatif de chaque paire de ``symbols`` (``None`` : toutes) présente dans la
+    réponse ``bookTicker``."""
     out = {}
     for row in book:
         symbol = row.get("symbol")
-        if symbol not in symbols:
+        if symbols is not None and symbol not in symbols:
             continue
         try:
             bid, ask = Decimal(str(row["bidPrice"])), Decimal(str(row["askPrice"]))
@@ -64,12 +74,14 @@ def fetch(url: str, *, notify: Callable[[str], None], **http_options: Any) -> li
     return book
 
 
-def medians(paths: DataPaths, min_samples: int, until_ms: int | None = None) -> dict[str, float]:
+def medians(
+    paths: DataPaths, min_samples: int, until_ms: int | None = None, market: str = "spot"
+) -> dict[str, float]:
     """Médiane des spreads relevés, par paire ayant au moins ``min_samples`` relevés ;
     ``until_ms`` : seulement les relevés jusqu'à cet instant (refaire un calcul à l'identique,
     ex. le verdict d'un essai enregistré avant de nouveaux relevés)."""
     series: dict[str, list[float]] = {}
-    for record in read_records(paths.spreads):
+    for record in read_records(store(paths, market)):
         if until_ms is not None and record["ts_ms"] > until_ms:
             continue
         for symbol, value in record["spreads"].items():
@@ -83,28 +95,38 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
     show = sub.add_parser("show", help="médiane par paire")
     show.add_argument("--min-samples", type=int, default=24)
     parser.add_argument("--exchange", default="binance", help="nom dans base.yaml")
+    parser.add_argument("--market", choices=["spot", "um"], default="spot")
 
 
-def _action(ctx: Context) -> int:
+def _wanted_spot(ctx: Context) -> tuple[str, set[str] | None]:
+    """URL et paires du spot : celles de la devise du compte et les paires tradées."""
     base = ctx.config.base
     exchange = base.exchange(ctx.args.exchange)
-    if ctx.args.cmd == "show":
-        found = medians(ctx.paths, ctx.args.min_samples)
-        for symbol, value in sorted(found.items(), key=lambda kv: kv[1]):
-            print(f"{symbol:14s} {value:.4%}")
-        print(f"{len(found)} paires avec au moins {ctx.args.min_samples} relevés")
-        return 0
     snapshot = SnapshotStore(ctx.paths, exchange.name).latest()
     if snapshot is None:
         raise ExchangeError("aucun snapshot exchangeInfo : lancer d'abord exchange_info fetch")
     quoted = {
         s["symbol"] for s in snapshot.symbols() if s["quoteAsset"] == base.symbols.quote_asset
     }
-    wanted = quoted | set(base.symbols.trade)
-    measured = spreads_from(fetch(exchange.rest_url + ENDPOINT, notify=ctx.notify), wanted)
-    append_record(ctx.paths.spreads, {"ts_ms": now_ms(), "spreads": measured})
-    print(f"{len(measured)} spreads relevés sur {len(wanted)} paires")
-    ctx.journal.info("spreads.sample", {"pairs": len(measured)})
+    return exchange.rest_url + ENDPOINT, quoted | set(base.symbols.trade)
+
+
+def _action(ctx: Context) -> int:
+    market = ctx.args.market
+    if ctx.args.cmd == "show":
+        found = medians(ctx.paths, ctx.args.min_samples, market=market)
+        for symbol, value in sorted(found.items(), key=lambda kv: kv[1]):
+            print(f"{symbol:14s} {value:.4%}")
+        print(f"{len(found)} paires avec au moins {ctx.args.min_samples} relevés")
+        return 0
+    if market == "um":
+        url, wanted = ctx.config.timing.futures_rest_url + UM_ENDPOINT, None
+    else:
+        url, wanted = _wanted_spot(ctx)
+    measured = spreads_from(fetch(url, notify=ctx.notify), wanted)
+    append_record(store(ctx.paths, market), {"ts_ms": now_ms(), "spreads": measured})
+    print(f"{len(measured)} spreads relevés ({market})")
+    ctx.journal.info("spreads.sample", {"market": market, "pairs": len(measured)})
     return 0
 
 
