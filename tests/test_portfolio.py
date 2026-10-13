@@ -26,6 +26,7 @@ def _panel(funding_a: list[float] | None = None) -> tuple[pl.DataFrame, pl.Serie
                     "symbol": sym,
                     "t_ms": T0 + i * H,
                     "open": o,
+                    "high": o,
                     "close": o,
                     "funding": fund,
                     "eligible": True,
@@ -105,3 +106,55 @@ def test_buy_and_hold() -> None:
     bench = pf.buy_and_hold(panel, "A", 1)
     assert bench["bench"].to_list() == pytest.approx([0.10, 0.10, 0.0, 0.0])
     assert pf.buy_and_hold(panel, "ZZZ", 1)["bench"].to_list() == [0.0] * 4
+
+
+def test_short_liquidated_when_peak_doubles_even_if_price_falls_back() -> None:
+    """Vente de B (poids −½) : le plus haut de la détention atteint 2,1 × l'entrée puis le prix
+    retombe sous l'entrée. À 1×, la ligne est liquidée : perte = la mise (½), pas un gain. Une
+    hausse de 900 % sans le plafond coûterait 4,5 × la mise."""
+    rows = []
+    for sym, opens, highs, s in (
+        ("A", [100.0, 100, 100], [100.0, 100, 100], 3.0),
+        ("B", [100.0, 100, 90], [100.0, 210, 90], 1.0),
+        ("C", [100.0, 100, 1000], [100.0, 100, 1000], 2.0),
+    ):
+        for i in range(3):
+            rows.append(
+                {
+                    "symbol": sym,
+                    "t_ms": T0 + i * H,
+                    "open": opens[i],
+                    "high": highs[i],
+                    "close": opens[i],
+                    "funding": 0.0,
+                    "eligible": True,
+                    "s": s if i == 0 else None,
+                }
+            )
+    df = pl.DataFrame(rows)
+    w = pf.weights(df.drop("s"), df["s"], pf.Book(1, 1, 1, {}, 0.0))
+    b = w.filter(pl.col("symbol") == "B").row(0, named=True)
+    assert b["liquidated"] and b["pnl"] == pytest.approx(-0.5)
+    out = pf.period_returns(df.drop("s"), df["s"], pf.Book(1, 1, 1, {}, 0.0))
+    assert out["liquidations"].to_list()[0] == 1
+    assert out["net"].to_list()[0] == pytest.approx(-0.5)  # A : 0 ; B : −½
+
+
+def test_loss_capped_at_the_stake_without_peak_data() -> None:
+    """Même sans plus haut connu (exit seul), une ligne ne perd jamais plus que sa mise."""
+    rows = [
+        {
+            "symbol": "A",
+            "t_ms": T0 + i * H,
+            "open": o,
+            "high": o,
+            "close": o,
+            "funding": 0.0,
+            "eligible": True,
+        }
+        for i, o in enumerate([100.0, 100.0, 1100.0])
+    ]
+    df = pl.DataFrame(rows)
+    sig = pl.Series([1.0, None, None])
+    w = pf.weights(df, sig, pf.Book(1, 0, 1, {}, 0.0))
+    assert w["pnl"].to_list() == pytest.approx([-1.0])

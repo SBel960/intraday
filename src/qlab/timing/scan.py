@@ -153,6 +153,7 @@ def summary_row(
         "cost_per_year": per_year("cost"),
         "funding_per_year": per_year("funding"),
         "invested": float((out["lines"].to_numpy() > 0).mean()),
+        "liquidations": int(out["liquidations"].sum()),
         "periods": int(r.size),
         "start": date_str(int(out["t_ms"][0])),
     }
@@ -176,15 +177,15 @@ def render(rows: list[dict[str, object]], study: Study, n_trials: int) -> str:
         study.spread_note,
         "",
         "| # | Essai | Paramètres | Sharpe an. | Net/an | Brut/an | Frais/an | Financement/an "
-        "| Investi | Depuis |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "| Investi | Liquidations | Depuis |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for i, r in enumerate(rows, 1):
         params = ", ".join(f"{k}={v}" for k, v in r["params"].items())  # type: ignore[attr-defined]
         lines.append(
             f"| {i} | {r['id']} | {params} | {r['sharpe']:+.2f} | {r['net_per_year']:+.1%} | "
             f"{r['gross_per_year']:+.1%} | {r['cost_per_year']:.1%} | "
-            f"{r['funding_per_year']:+.1%} | {r['invested']:.0%} | {r['start']} |"
+            f"{r['funding_per_year']:+.1%} | {r['invested']:.0%} | {r['liquidations']} | {r['start']} |"
         )
     return "\n".join(lines) + "\n"
 

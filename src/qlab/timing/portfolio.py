@@ -7,8 +7,11 @@ n_short)`` (exposition brute 1 : levier 1×). Moins de candidats que de lignes �
 
 Rendement d'une période, par ligne : ``w · (r − f)`` (``r`` : ``panel.forward_return``,
 ``f`` : financement réglé pendant la détention ; l'acheteur paie un taux positif, le vendeur
-le reçoit) ; coût : ``|w_T − w_{T−h}| · c`` par contrat, ``c`` = coût d'une jambe taker
-(``costs/cost_model.one_way_taker`` : frais + ½ spread + glissement). La dérive des poids
+le reçoit), **plafonné à la perte de la mise** ``−|w|`` : à 1×, chaque ligne a sa marge
+isolée ; une vente à découvert est liquidée si le plus haut de la détention double le prix
+d'entrée (``panel.forward_peak``), quelle que soit la sortie. Coût : ``|w_T − w_{T−h}| · c``
+par contrat, ``c`` = coût d'une jambe taker (``costs/cost_model.one_way_taker`` : frais + ½
+spread + glissement). La dérive des poids
 pendant la période est ignorée (approximation usuelle, h ≤ quelques jours).
 """
 
@@ -23,7 +26,7 @@ import polars as pl
 from qlab.core.errors import DataError
 from qlab.core.timeutils import MS_PER_HOUR
 from qlab.costs.cost_model import one_way_taker
-from qlab.timing.panel import forward_funding, forward_return
+from qlab.timing.panel import forward_funding, forward_peak, forward_return
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +85,7 @@ def weights(panel: pl.DataFrame, signal: pl.Series, book: Book) -> pl.DataFrame:
             signal.alias("s"),
             forward_return(h).alias("r"),
             forward_funding(h).alias("f"),
+            forward_peak(h).alias("peak"),
         )
         .filter(
             (pl.col("t_ms") % step == 0)
@@ -105,12 +109,18 @@ def weights(panel: pl.DataFrame, signal: pl.Series, book: Book) -> pl.DataFrame:
         .otherwise(0.0)
     )
     held = cand.with_columns((side / lines).alias("w")).filter(pl.col("w") != 0)
-    return held.select("t_ms", "symbol", "w", "r", "f").sort("t_ms", "symbol")
+    liquidated = (pl.col("w") < 0) & (pl.col("peak") >= 1)
+    stake = -pl.col("w").abs()
+    capped = pl.max_horizontal(pl.col("w") * (pl.col("r") - pl.col("f")), stake)
+    pnl = pl.when(liquidated).then(stake).otherwise(capped)
+    held = held.with_columns(pnl.alias("pnl"), liquidated.alias("liquidated"))
+    return held.select("t_ms", "symbol", "w", "r", "f", "pnl", "liquidated").sort("t_ms", "symbol")
 
 
 def period_returns(panel: pl.DataFrame, signal: pl.Series, book: Book) -> pl.DataFrame:
     """Une ligne par rééquilibrage : ``gross``, ``funding``, ``cost``, ``net``, ``turnover``,
-    ``lines`` (0 = à plat). Période à plat : 0, moins le coût de fermeture éventuel."""
+    ``lines`` (0 = à plat), ``liquidations``. Période à plat : 0, moins le coût de fermeture
+    éventuel."""
     held = weights(panel, signal, book)
     step = book.horizon_h * MS_PER_HOUR
     prev = held.select((pl.col("t_ms") + step).alias("t_ms"), "symbol", pl.col("w").alias("w0"))
@@ -125,19 +135,26 @@ def period_returns(panel: pl.DataFrame, signal: pl.Series, book: Book) -> pl.Dat
         pl.col("c").sum().alias("cost"), pl.col("dw").sum().alias("turnover")
     )
     per_hold = held.group_by("t_ms").agg(
-        (pl.col("w") * pl.col("r")).sum().alias("gross"),
+        pl.col("pnl").sum().alias("pnl"),
         (pl.col("w") * pl.col("f")).sum().alias("funding"),
         pl.len().alias("lines"),
+        pl.col("liquidated").sum().alias("liquidations"),
     )
     grid = rebalance_times(panel, book.horizon_h).to_frame()
     out = grid.join(per_hold, on="t_ms", how="left").join(per_trade, on="t_ms", how="left")
     out = out.with_columns(
-        pl.col("gross", "funding", "cost", "turnover").fill_null(0.0),
-        pl.col("lines").fill_null(0).cast(pl.Int64),
+        pl.col("pnl", "funding", "cost", "turnover").fill_null(0.0),
+        pl.col("lines", "liquidations").fill_null(0).cast(pl.Int64),
     )
-    return out.with_columns(
-        (pl.col("gross") - pl.col("funding") - pl.col("cost")).alias("net")
-    ).sort("t_ms")
+    # brut = résultat des prix (pnl, financement compris, plafonné à la mise) hors financement
+    return (
+        out.with_columns(
+            (pl.col("pnl") + pl.col("funding")).alias("gross"),
+            (pl.col("pnl") - pl.col("cost")).alias("net"),
+        )
+        .drop("pnl")
+        .sort("t_ms")
+    )
 
 
 def buy_and_hold(panel: pl.DataFrame, symbol: str, horizon_h: int) -> pl.DataFrame:

@@ -158,6 +158,15 @@ def complete_only(panel: pl.DataFrame, horizon_h: int) -> pl.DataFrame:
     return panel.filter(pl.col("t_ms") + (1 + horizon_h) * MS_PER_HOUR <= last)
 
 
+def forward_peak(horizon_h: int) -> pl.Expr:
+    """Plus haut atteint pendant la détention (heures ``t + 1`` à ``t + h``) rapporté à
+    l'entrée, moins 1 : une vente à découvert à 1× est liquidée dès que ce nombre atteint 1
+    (prix doublé), même si le prix est retombé à la sortie."""
+    entry = pl.col("open").shift(-1).over("symbol")
+    peak = pl.col("high").rolling_max(horizon_h, min_samples=1).shift(-horizon_h).over("symbol")
+    return peak / entry - 1
+
+
 def forward_funding(horizon_h: int) -> pl.Expr:
     """Financement réglé pendant la détention : heures ``t + 1`` à ``t + h`` (par contrat). Un
     règlement à l'instant même de l'entrée est compté (prudent), celui de la sortie non."""
