@@ -1,0 +1,75 @@
+# Volet multi-actifs (docs/SPEC_MULTI_ACTIFS.md) : 45 marchés en séries quotidiennes.
+# Recherche et paper uniquement. ETF américains = mesure du rendement (dividendes et roulement
+# des contrats compris) ; en réel : équivalents UCITS ou futures. Suffixes : _frac, _days, _s.
+
+chart_url: https://query1.finance.yahoo.com/v8/finance/chart/
+request_interval_s: 1.0
+start_date: "2000-01-01"
+
+# Coût prudent d'une jambe : commission + ½ spread + glissement.
+classes:
+  - {name: actions, cost_one_way_frac: 0.0005}
+  - {name: actions_emergentes, cost_one_way_frac: 0.001}
+  - {name: obligations, cost_one_way_frac: 0.0005}
+  - {name: devises, cost_one_way_frac: 0.0005}
+  - {name: matieres_premieres, cost_one_way_frac: 0.001}
+  - {name: immobilier, cost_one_way_frac: 0.0005}
+  - {name: crypto, cost_one_way_frac: 0.0015}
+
+assets:
+  - {ticker: SPY, asset_class: actions, label: "S&P 500"}
+  - {ticker: QQQ, asset_class: actions, label: "Nasdaq 100"}
+  - {ticker: IWM, asset_class: actions, label: "Russell 2000"}
+  - {ticker: VGK, asset_class: actions, label: "Europe"}
+  - {ticker: EWG, asset_class: actions, label: "Allemagne"}
+  - {ticker: EWU, asset_class: actions, label: "Royaume-Uni"}
+  - {ticker: EWJ, asset_class: actions, label: "Japon"}
+  - {ticker: EWC, asset_class: actions, label: "Canada"}
+  - {ticker: EWA, asset_class: actions, label: "Australie"}
+  - {ticker: EEM, asset_class: actions_emergentes, label: "Émergents"}
+  - {ticker: FXI, asset_class: actions_emergentes, label: "Chine"}
+  - {ticker: EWZ, asset_class: actions_emergentes, label: "Brésil"}
+  - {ticker: EWT, asset_class: actions_emergentes, label: "Taïwan"}
+  - {ticker: EWY, asset_class: actions_emergentes, label: "Corée"}
+  - {ticker: INDA, asset_class: actions_emergentes, label: "Inde"}
+  - {ticker: SHY, asset_class: obligations, label: "Trésor US 1-3 ans"}
+  - {ticker: IEF, asset_class: obligations, label: "Trésor US 7-10 ans"}
+  - {ticker: TLT, asset_class: obligations, label: "Trésor US 20 ans +"}
+  - {ticker: TIP, asset_class: obligations, label: "Trésor US indexé"}
+  - {ticker: LQD, asset_class: obligations, label: "Entreprises US"}
+  - {ticker: HYG, asset_class: obligations, label: "Haut rendement US"}
+  - {ticker: EMB, asset_class: obligations, label: "Dette émergente"}
+  - {ticker: BWX, asset_class: obligations, label: "Obligations internationales"}
+  - {ticker: FXE, asset_class: devises, label: "Euro"}
+  - {ticker: FXY, asset_class: devises, label: "Yen"}
+  - {ticker: FXB, asset_class: devises, label: "Livre sterling"}
+  - {ticker: FXA, asset_class: devises, label: "Dollar australien"}
+  - {ticker: FXC, asset_class: devises, label: "Dollar canadien"}
+  - {ticker: FXF, asset_class: devises, label: "Franc suisse"}
+  - {ticker: UUP, asset_class: devises, label: "Dollar US (indice)"}
+  - {ticker: GLD, asset_class: matieres_premieres, label: "Or"}
+  - {ticker: SLV, asset_class: matieres_premieres, label: "Argent"}
+  - {ticker: USO, asset_class: matieres_premieres, label: "Pétrole"}
+  - {ticker: UNG, asset_class: matieres_premieres, label: "Gaz naturel"}
+  - {ticker: CPER, asset_class: matieres_premieres, label: "Cuivre"}
+  - {ticker: DBB, asset_class: matieres_premieres, label: "Métaux industriels"}
+  - {ticker: DBA, asset_class: matieres_premieres, label: "Agriculture"}
+  - {ticker: WEAT, asset_class: matieres_premieres, label: "Blé"}
+  - {ticker: CORN, asset_class: matieres_premieres, label: "Maïs"}
+  - {ticker: DBC, asset_class: matieres_premieres, label: "Panier de matières premières"}
+  - {ticker: VNQ, asset_class: immobilier, label: "Immobilier US"}
+  - {ticker: RWX, asset_class: immobilier, label: "Immobilier hors US"}
+  - {ticker: BTC-USD, asset_class: crypto, label: "Bitcoin"}
+  - {ticker: ETH-USD, asset_class: crypto, label: "Ether"}
+  - {ticker: XLE, asset_class: actions, label: "Énergie US"}
+
+trading_days_per_year: 252
+warmup_days: 252                  # un an de cours avant d'entrer dans l'univers
+volume_lookback_days: 60
+min_volume_usd: 2000000           # volume quotidien médian ≥ 2 M$ (les débuts illiquides sortent)
+spike_log_return: 0.25            # pointe aller-retour > 25 % deux jours de suite ⇒ trou
+vol_lookback_days: 60             # volatilité des poids inverses
+n_long: 5                         # momentum transversal : 5 achetés, 5 vendus
+n_short: 5
+holdout_start: "2024-10-01"       # 2 dernières années : lues une seule fois
+max_trials: 60

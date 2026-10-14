@@ -30,6 +30,7 @@ BASE_FILE = "base.yaml"
 INTRADAY_FILE = "intraday.yaml"
 LONGTERM_FILE = "longterm.yaml"
 TIMING_FILE = "timing.yaml"
+MARKETS_FILE = "markets.yaml"
 MINUTES_PER_DAY = 1440
 
 
@@ -627,11 +628,97 @@ class TimingConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class AssetClass:
+    """Classe d'actifs du volet multi-actifs et coût prudent d'une jambe (commission, ½ spread,
+    glissement)."""
+
+    name: str
+    cost_one_way_frac: float
+
+    def __post_init__(self) -> None:
+        _check(bool(self.name), "classe d'actifs : nom vide")
+        _fraction("cost_one_way_frac", self.cost_one_way_frac)
+
+
+@dataclass(frozen=True, slots=True)
+class MarketAsset:
+    """Un marché : symbole de la source (``ticker``), classe, libellé lisible."""
+
+    ticker: str
+    asset_class: str
+    label: str
+
+
+@dataclass(frozen=True, slots=True)
+class MarketsConfig:
+    """Volet multi-actifs (``docs/SPEC_MULTI_ACTIFS.md``) : séries quotidiennes de 45 marchés.
+
+    ``chart_url`` : API des séries (le ticker est ajouté au bout) ; ``request_interval_s`` :
+    pause entre deux requêtes ; ``start_date`` : début des téléchargements ;
+    ``trading_days_per_year`` : jours ouvrés par an (annualisation) ; ``warmup_days`` : jours
+    de cotation avant d'être éligible, avec un volume quotidien médian (en dollars) des
+    ``volume_lookback_days`` jours précédents ≥ ``min_volume_usd`` ; ``spike_log_return`` :
+    pointe aller-retour (|ln| au-delà, dans les deux sens, deux jours de suite) traitée comme
+    une erreur de cotation, donc un trou ; ``vol_lookback_days`` : fenêtre de la volatilité des
+    poids inverses ; ``n_long`` / ``n_short`` : lignes du momentum transversal ;
+    ``holdout_start`` : début du hold-out ; ``max_trials`` : budget d'essais du volet."""
+
+    chart_url: str
+    request_interval_s: float
+    start_date: str
+    classes: tuple[AssetClass, ...]
+    assets: tuple[MarketAsset, ...]
+    trading_days_per_year: int
+    warmup_days: int
+    volume_lookback_days: int
+    min_volume_usd: float
+    spike_log_return: float
+    vol_lookback_days: int
+    n_long: int
+    n_short: int
+    holdout_start: str
+    max_trials: int
+
+    def __post_init__(self) -> None:
+        _url("chart_url", self.chart_url, "https")
+        _non_negative("request_interval_s", self.request_interval_s)
+        for name in ("start_date", "holdout_start"):
+            value = getattr(self, name)
+            _check(
+                bool(re.match(r"^\d{4}-\d{2}-\d{2}$", value)),
+                f"{name} : date AAAA-MM-JJ attendue (reçu {value!r})",
+            )
+        _unique("classes.name", [c.name for c in self.classes])
+        _unique("assets.ticker", [a.ticker for a in self.assets])
+        known = {c.name for c in self.classes}
+        for a in self.assets:
+            _check(a.asset_class in known, f"{a.ticker} : classe inconnue {a.asset_class!r}")
+        _positive("trading_days_per_year", self.trading_days_per_year)
+        _non_negative("warmup_days", self.warmup_days)
+        _positive("volume_lookback_days", self.volume_lookback_days)
+        _non_negative("min_volume_usd", self.min_volume_usd)
+        _positive("spike_log_return", self.spike_log_return)
+        _check(self.vol_lookback_days >= 2, "vol_lookback_days doit être ≥ 2")
+        _non_negative("n_long", self.n_long)
+        _non_negative("n_short", self.n_short)
+        _positive("max_trials", self.max_trials)
+
+    def cost_of(self, ticker: str) -> float:
+        """Coût d'une jambe du marché ``ticker`` (celui de sa classe)."""
+        by_class = {c.name: c.cost_one_way_frac for c in self.classes}
+        for a in self.assets:
+            if a.ticker == ticker:
+                return by_class[a.asset_class]
+        raise ConfigError(f"marché inconnu : {ticker}")
+
+
+@dataclass(frozen=True, slots=True)
 class QlabConfig:
     base: BaseConfig
     intraday: IntradayConfig
     longterm: LongtermConfig
     timing: TimingConfig
+    markets: MarketsConfig
 
 
 def load_base(path: Path) -> BaseConfig:
@@ -650,13 +737,18 @@ def load_timing(path: Path) -> TimingConfig:
     return build(TimingConfig, read_yaml(path, error=ConfigError), "timing", error=ConfigError)
 
 
+def load_markets(path: Path) -> MarketsConfig:
+    return build(MarketsConfig, read_yaml(path, error=ConfigError), "markets", error=ConfigError)
+
+
 def load_config(config_dir: Path) -> QlabConfig:
-    """Charge et valide les quatre fichiers de ``config_dir``."""
+    """Charge et valide les cinq fichiers de ``config_dir``."""
     return QlabConfig(
         base=load_base(config_dir / BASE_FILE),
         intraday=load_intraday(config_dir / INTRADAY_FILE),
         longterm=load_longterm(config_dir / LONGTERM_FILE),
         timing=load_timing(config_dir / TIMING_FILE),
+        markets=load_markets(config_dir / MARKETS_FILE),
     )
 
 

@@ -66,9 +66,9 @@ def test_holdout_runs_once_and_only_declared_combinations(config_dir: Path, tmp_
 def test_criteria_block_in_periods(config_dir: Path) -> None:
     """mean_block_days = 10 (config de test) ⇒ 240 périodes d'1 h, 10 de 24 h, 1 au minimum."""
     config = load_config(config_dir)
-    assert verdict.timing_criteria(config, 1).mean_block == pytest.approx(240)
-    assert verdict.timing_criteria(config, 24).mean_block == pytest.approx(10)
-    assert verdict.timing_criteria(config, 1000).mean_block == pytest.approx(1)
+    assert verdict.timing_criteria(config, 24, 1).mean_block == pytest.approx(240)
+    assert verdict.timing_criteria(config, 24, 24).mean_block == pytest.approx(10)
+    assert verdict.timing_criteria(config, 24, 1000).mean_block == pytest.approx(1)
 
 
 def test_sharpe_variance_on_a_common_time_scale(tmp_path: Path) -> None:
@@ -79,4 +79,4 @@ def test_sharpe_variance_on_a_common_time_scale(tmp_path: Path) -> None:
     for h, sharpe, ppy in ((1, 0.1, 400), (4, 0.2, 100), (8, 0.0, 100)):
         result = TrialResult(sharpe, 50, 0.0, 3.0, ppy)
         registry.record(hyp, {"lookback_h": 2, "horizon_h": h}, result, ts_ms=1)
-    assert verdict.sharpe_variance(registry, 100) == pytest.approx(0.04 / 3)
+    assert verdict.sharpe_variance(registry, "timing", 100) == pytest.approx(0.04 / 3)

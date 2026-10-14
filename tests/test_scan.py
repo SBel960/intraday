@@ -1,34 +1,19 @@
-"""Tests de qlab.timing.scan : budget, nom de signal, balayage complet sur un petit marché."""
+"""Tests de qlab.timing.scan : étude des perpétuels, balayage complet sur un petit marché."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-import polars as pl
-import pytest
 from fakes import TIMING_T0, timing_fiche, timing_market
 
-from qlab.core.errors import DataError
 from qlab.core.paths import DataPaths
 from qlab.core.timeutils import MS_PER_HOUR, date_to_ms
-from qlab.research.hypothesis import load_hypothesis
 from qlab.research.trials import TrialRegistry
 from qlab.timing import scan
 
 H = MS_PER_HOUR
 T0 = TIMING_T0
-
-
-def test_budget_and_signal_name(tmp_path: Path) -> None:
-    fiche = load_hypothesis(timing_fiche(tmp_path, "tm_momentum", [1, 4]))
-    assert scan.check_budget([fiche], 2) == 2
-    with pytest.raises(DataError, match="budget"):
-        scan.check_budget([fiche], 1)
-    assert scan.signal_name(fiche) == "momentum"
-    other = load_hypothesis(timing_fiche(tmp_path, "autre", [1]))
-    with pytest.raises(DataError, match="tm_<signal>"):
-        scan.signal_name(other)
 
 
 def test_run_records_trials_and_writes_reports(config_dir: Path, tmp_path: Path) -> None:
@@ -50,6 +35,7 @@ def test_run_records_trials_and_writes_reports(config_dir: Path, tmp_path: Path)
     assert all(r["periods"] < (holdout - T0) // H for r in blob["rows"])  # rien du hold-out
     assert scan.main(args) == 0  # relancer ne recompte pas
     assert registry.n_trials("timing") == 3
+    assert (paths.reports / f"timing_scan_{blob['date']}.md").exists()
 
 
 def test_budget_checked_before_running(config_dir: Path, tmp_path: Path) -> None:
@@ -57,11 +43,3 @@ def test_budget_checked_before_running(config_dir: Path, tmp_path: Path) -> None
     fiches.mkdir()
     timing_fiche(fiches, "tm_momentum", list(range(1, 52)))  # 51 essais > 50 (config de test)
     assert scan.main(["--config", str(config_dir), "--fiches", str(fiches), "run"]) == 1
-
-
-def test_book_from_card_parameters_else_config() -> None:
-    study = scan.Study(pl.DataFrame(), {}, 0.001, 3, 3, 0, 360, "")
-    plain = study.book({"horizon_h": 4})
-    assert (plain.horizon_h, plain.n_long, plain.n_short, plain.signed) == (4, 3, 3, False)
-    custom = study.book({"horizon_h": 8, "lookback_h": 2, "n_short": 0, "signed": 1})
-    assert (custom.horizon_h, custom.n_long, custom.n_short, custom.signed) == (8, 3, 0, True)

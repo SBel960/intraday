@@ -115,9 +115,12 @@ def test_eligibility_ignores_future_volume() -> None:
 
 def test_in_sample_stops_before_holdout() -> None:
     p = pn.assemble(_bars("AUSDT", [1.0] * 10), NO_FUNDING, UNI)
-    cut = T0 + 6 * H
+    cut = pn.bar_at(p, T0 + 6 * H)
+    assert cut == (T0 + 6 * H) // H  # barre = heure depuis l'époque
     kept = pn.in_sample(p, cut, 2)["t_ms"].to_list()
     assert kept == [T0 + i * H for i in range(3)]  # sortie open(t+3) < t=6 ⇒ t ≤ 2
+    with pytest.raises(DataError, match="aucune barre"):
+        pn.bar_at(p, T0 + 10 * H)
 
 
 def _write(paths: DataPaths, symbol: str, df: pl.DataFrame) -> None:

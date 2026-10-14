@@ -14,6 +14,10 @@ série valent donc exactement des heures : ``shift(k)`` sur un contrat = k heure
 
 Rendements sur l'ouverture : la décision prise à la clôture de l'heure ``t`` s'exécute à
 l'ouverture de l'heure ``t + 1`` (``forward_return``).
+
+**Barre** : colonne ``bar``, numéro entier de la ligne dans la grille (ici l'heure depuis
+l'époque ; un jour ouvré pour ``markets/daily_panel.py``). Les fenêtres à venir (``forward_*``) et
+le portefeuille comptent en barres : le même moteur sert aux heures et aux jours ouvrés.
 """
 
 from __future__ import annotations
@@ -106,7 +110,7 @@ def eligibility(panel: pl.DataFrame, universe: Universe) -> pl.Series:
 
 def assemble(bars: pl.DataFrame, funding: pl.DataFrame, universe: Universe) -> pl.DataFrame:
     """Bougies + règlements de plusieurs contrats → panel complet (grille, funding, eligible)."""
-    panel = complete_grid(bars)
+    panel = complete_grid(bars).with_columns((pl.col("t_ms") // MS_PER_HOUR).alias("bar"))
     panel = panel.join(hourly_funding(funding), on=["symbol", "t_ms"], how="left")
     panel = panel.with_columns(pl.col("funding").fill_null(0.0))
     return panel.with_columns(eligibility(panel, universe).fill_null(False).alias("eligible"))
@@ -134,46 +138,54 @@ def load(
     return assemble(bars, funding, universe)
 
 
-def forward_return(horizon_h: int) -> pl.Expr:
-    """Rendement simple de l'ouverture de ``t + 1`` à la sortie, ``h`` heures plus tard (par
+def forward_return(horizon: int) -> pl.Expr:
+    """Rendement simple de l'ouverture de ``t + 1`` à la sortie, ``h`` barres plus tard (par
     contrat). Sortie : ouverture de ``t + 1 + h`` ; si elle manque (trou, retrait de la cote),
     dernière clôture connue à ``t + h``, puis dernière clôture du contrat : une position sur un
     contrat retiré est soldée à son dernier prix, jamais ignorée (biais du survivant). Les
-    dernières heures d'un contrat encore coté en fin de données sont à exclure par l'appelant
+    dernières barres d'un contrat encore coté en fin de données sont à exclure par l'appelant
     (``in_sample``, ``complete_only``)."""
     entry = pl.col("open").shift(-1).over("symbol")
     exit_ = pl.coalesce(
-        pl.col("open").shift(-(1 + horizon_h)).over("symbol"),
-        pl.col("close").forward_fill().shift(-horizon_h).over("symbol"),
+        pl.col("open").shift(-(1 + horizon)).over("symbol"),
+        pl.col("close").forward_fill().shift(-horizon).over("symbol"),
         pl.col("close").drop_nulls().last().over("symbol"),
     )
     return exit_ / entry - 1
 
 
-def complete_only(panel: pl.DataFrame, horizon_h: int) -> pl.DataFrame:
-    """Lignes dont la sortie tombe avant la fin des données (``t + 1 + h`` ≤ dernière heure)."""
-    last = panel["t_ms"].max()
+def bar_at(panel: pl.DataFrame, t_ms: int) -> int:
+    """Première barre du panel qui commence à ``t_ms`` ou après (début du hold-out)."""
+    later = panel.filter(pl.col("t_ms") >= t_ms)["bar"].min()
+    if not isinstance(later, int):
+        raise DataError(f"aucune barre du panel à partir de {t_ms}")
+    return later
+
+
+def complete_only(panel: pl.DataFrame, horizon: int) -> pl.DataFrame:
+    """Lignes dont la sortie tombe avant la fin des données (``bar + 1 + h`` ≤ dernière barre)."""
+    last = panel["bar"].max()
     if not isinstance(last, int):
         return panel
-    return panel.filter(pl.col("t_ms") + (1 + horizon_h) * MS_PER_HOUR <= last)
+    return panel.filter(pl.col("bar") + 1 + horizon <= last)
 
 
-def forward_peak(horizon_h: int) -> pl.Expr:
-    """Plus haut atteint pendant la détention (heures ``t + 1`` à ``t + h``) rapporté à
+def forward_peak(horizon: int) -> pl.Expr:
+    """Plus haut atteint pendant la détention (barres ``t + 1`` à ``t + h``) rapporté à
     l'entrée, moins 1 : une vente à découvert à 1× est liquidée dès que ce nombre atteint 1
     (prix doublé), même si le prix est retombé à la sortie."""
     entry = pl.col("open").shift(-1).over("symbol")
-    peak = pl.col("high").rolling_max(horizon_h, min_samples=1).shift(-horizon_h).over("symbol")
+    peak = pl.col("high").rolling_max(horizon, min_samples=1).shift(-horizon).over("symbol")
     return peak / entry - 1
 
 
-def forward_funding(horizon_h: int) -> pl.Expr:
-    """Financement réglé pendant la détention : heures ``t + 1`` à ``t + h`` (par contrat). Un
+def forward_funding(horizon: int) -> pl.Expr:
+    """Financement réglé pendant la détention : barres ``t + 1`` à ``t + h`` (par contrat). Un
     règlement à l'instant même de l'entrée est compté (prudent), celui de la sortie non."""
-    total = pl.col("funding").rolling_sum(horizon_h).shift(-horizon_h).over("symbol")
+    total = pl.col("funding").rolling_sum(horizon).shift(-horizon).over("symbol")
     return total.fill_null(0.0)
 
 
-def in_sample(panel: pl.DataFrame, holdout_start_ms: int, horizon_h: int) -> pl.DataFrame:
+def in_sample(panel: pl.DataFrame, holdout_bar: int, horizon: int) -> pl.DataFrame:
     """Lignes dont la détention se termine avant le hold-out (aucune donnée du hold-out lue)."""
-    return panel.filter(pl.col("t_ms") + (1 + horizon_h) * MS_PER_HOUR < holdout_start_ms)
+    return panel.filter(pl.col("bar") + 1 + horizon < holdout_bar)

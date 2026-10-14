@@ -25,6 +25,8 @@ def test_tree_matches_documentation() -> None:
     assert p.lt_klines_dir("1h") == Path("/data/lt/klines_1h")
     assert p.lt_futures("funding", "BTCUSDT") == Path("/data/lt/futures/funding/BTCUSDT.parquet")
     assert p.lt_klines("1h", "币安人生USDT").name == "币安人生USDT.parquet"
+    assert p.markets_daily("BTC-USD") == Path("/data/markets/daily/BTC-USD.parquet")
+    assert p.markets_holdout == Path("/data/meta/markets_holdout.jsonl")
     assert p.raw_archive("binance_vision", "spot/monthly/klines/BTCEUR/1d/X.zip") == Path(
         "/data/raw/binance_vision/spot/monthly/klines/BTCEUR/1d/X.zip"
     )
@@ -44,6 +46,7 @@ def test_documented_in_arborescence() -> None:
         "raw/{source}/",
         "lt/{klines_1d|klines_1h}/{symbol}.parquet",
         "lt/futures/{funding|metrics}/{symbol}.parquet",
+        "markets/daily/{ticker}.parquet",
     ):
         assert fragment in doc
 

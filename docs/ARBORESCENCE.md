@@ -45,15 +45,19 @@ intraday/
 │   ├── SPEC_INTRADAY.md           spécification d'origine (référence)
 │   ├── SPEC_LONG_TERME.md         addendum long terme
 │   ├── ARBORESCENCE.md            ce fichier + statut de validation par fichier
+│   ├── SPEC_MULTI_ACTIFS.md       volet multi-actifs : 45 marchés mondiaux en séries quotidiennes, référence = panier pondéré par le risque
 │   └── SPEC_EVENEMENTS.md         règles des informations hors marché (phase 9) : sources, réception, risque, signaux
 ├── config/
 │   ├── base.yaml                  racine des données, budget disque, sources, univers tradé (trade) et observé (observe), limites de risque, paliers de capital
 │   ├── intraday.yaml              horizons du gate, latences, fenêtres de features, seuils (fraîcheur, ratio 3)
 │   ├── longterm.yaml              lookbacks, bandes de rééquilibrage, DCA (montant, période), vol cible
+│   ├── markets.yaml               volet multi-actifs : source, 45 marchés et leurs classes (coût d'une jambe), liquidité, pointes, poids, hold-out, budget
 │   └── timing.yaml                volet timing : API et frais des contrats, horizons, univers liquide, lignes long / short, hold-out, budget d'essais
 ├── hypotheses/
 │   ├── _template.yaml             modèle de fiche d'hypothèse (mécanisme, horizon, features, coût, edge min, abandon)
-│   └── lt_*.yaml                  fiches de la vague 1, écrites AVANT tout test (voir « Hypothèses par vagues »)
+│   ├── lt_*.yaml                  fiches de la vague 1, écrites AVANT tout test (voir « Hypothèses par vagues »)
+│   ├── timing/tm_*.yaml           fiches du volet timing (perpétuels)
+│   └── multi/mk_*.yaml            fiches du volet multi-actifs
 ├── src/qlab/
 │   ├── core/
 │   │   ├── config.py              chargement YAML → dataclasses figées et validées ; erreur si une clé manque
@@ -89,6 +93,7 @@ intraday/
 │   │   ├── collector.py           websockets aggTrade + bookTicker, reconnexion, horodatage de réception, contrôle de l'écart d'horloge vs serveur
 │   │   ├── bronze.py              RAW → Bronze Parquet ZSTD, dédup sur (source, symbol, ts, seq), idempotent
 │   │   ├── gaps.py                détection des trous (seq et temps), table des trous, jamais d'interpolation
+│   │   ├── yahoo.py               séries quotidiennes ajustées (dividendes, divisions) des marchés du volet multi-actifs, une requête par marché, réponse vérifiée
 │   │   ├── binance_vision.py      data.binance.vision : listage S3 paginé, clés des jeux de données, lecture des .CHECKSUM (aucun téléchargement)
 │   │   ├── archives.py            synchronisation vers raw/binance_vision/ : bougies de TOUTES les paires spot (retirées comprises), financement USDⓈ-M, métriques des paires listées ; SHA-256, parallèle, reprise
 │   │   ├── tardis.py              book_ticker historique de Tardis.dev (1er du mois gratuit) : disponibilité officielle, gzip et en-têtes vérifiés, lecture en cotations (ts_ms, bid, ask)
@@ -131,12 +136,16 @@ intraday/
 │   │   ├── calendar.py            événements programmés (Fed, inflation US…) : fenêtres sans nouvelle position
 │   │   ├── news.py                collecte d'annonces (Binance, GDELT…), horodatées à la RÉCEPTION, RAW append-only
 │   │   └── classify.py            classement des annonces → drapeaux de risque ; modèle et prompt versionnés
-│   ├── timing/                    phase 10 : meilleur moment d'achat / vente sur les contrats perpétuels (long et short à 1×)
-│   │   ├── panel.py               panel horaire de tous les contrats : grille complète (trous marqués), financement par heure, univers liquide point-in-time, rendements futurs (contrat retiré soldé au dernier prix)
+│   ├── timing/                    phase 10 : meilleur moment d'achat / vente (long et short à 1×) ; moteur commun aux barres horaires (perpétuels) et quotidiennes (multi-actifs)
+│   │   ├── panel.py               panel horaire de tous les contrats : grille complète (trous marqués), barre, financement par heure, univers liquide point-in-time, fenêtres à venir en barres (contrat retiré soldé au dernier prix)
 │   │   ├── hourly_signals.py      signaux horaires orientés et causaux (momentum, retour, flux acheteur, choc de volume, financement, rattrapage de BTC, cassure, canal de Donchian, faible volatilité, saisonnalité) ; alias des fiches qui changent seulement le portefeuille
-│   │   ├── portfolio.py           n_long meilleurs / n_short pires toutes les h heures (ou signé : selon le signe du signal, le reste en cash), poids égaux, levier 1× ; rendements nets (frais taker, ½ spread, glissement, financement)
-│   │   ├── scan.py                balayage des fiches hypotheses/timing (budget vérifié avant), essais comptés, classement avant hold-out, rapport + JSON
-│   │   └── verdict.py             critères complets (DSR, écart de Sharpe vs buy & hold, années, moitiés d'univers, MinTRL) des meilleurs ; hold-out rejoué une seule fois
+│   │   ├── portfolio.py           n_long meilleurs / n_short pires toutes les h barres (ou signé : selon le signe du signal), poids égaux ou inverses de la volatilité, levier 1× ; rendements nets (frais, ½ spread, glissement, financement) ; buy & hold et panier de référence
+│   │   ├── study.py               étude d'un volet (données, coûts, portefeuille, référence, hold-out) ; essais comptés, classement avant hold-out, rapport + JSON
+│   │   ├── scan.py                étude des perpétuels (univers point-in-time, spreads mesurés, référence BTC) et commande de balayage des fiches hypotheses/timing
+│   │   └── verdict.py             critères complets (DSR, écart de Sharpe vs référence, années, moitiés d'univers, MinTRL) des meilleurs ; hold-out rejoué une seule fois par volet
+│   ├── markets/                   phase 11 : volet multi-actifs (actions, obligations, devises, matières premières, immobilier, crypto), jours ouvrés
+│   │   ├── daily_panel.py         panel quotidien : grille des jours ouvrés, barre, pointes aller-retour retirées, fériés (clôture reportée, aucune entrée), univers liquide point-in-time
+│   │   └── multi_asset.py         étude multi-actifs (coûts par classe, poids inverses de la volatilité, panier de référence) ; commandes scan / best / holdout
 │   └── longterm/
 │       ├── klines.py              lecture des archives (ms/µs ligne par ligne), contrôle qualité, bougies tronquées marquées, trous
 │       ├── klines_build.py        construction de lt/klines_{1d|1h}/{paire}.parquet (spot) ou lt/futures/klines_{iv}/ (contrats, --market um), reprise, erreurs isolées par paire
@@ -169,6 +178,7 @@ $DATA_ROOT/
 ├── events/{calendar|news|flags}/date=YYYY-MM-DD/*                   phase 9 : événements horodatés à la réception
 ├── lt/{klines_1d|klines_1h}/{symbol}.parquet                          toutes les paires spot observées, retirées comprises (~3–5 Go)
 ├── lt/futures/{funding|metrics}/{symbol}.parquet                      financement, positions ouvertes (contrats USDⓈ-M)
+├── markets/daily/{ticker}.parquet                                     séries quotidiennes ajustées des 45 marchés du volet multi-actifs (~7 Mo)
 ├── meta/
 │   ├── exchange_info/{source}/{YYYYMMDDTHHMMSSZ}.json.zst             snapshots versionnés (zstd : ~17 Mo → ~110 Ko), écrits seulement si le contenu change
 │   ├── cursors/                                                       curseurs de reprise
@@ -280,6 +290,17 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 78 bis | 10 · Timing | `live/timing_state.py` + carte « Recherche timing » du cockpit (`cockpit.py`, `cockpit.html`) | livré |
 | 78 ter | 10 · Timing | Vague 2 : portefeuille signé (`portfolio.Book.signed`), signal `channel` et alias (`hourly_signals.ALIASES`), portefeuille fixé par la fiche (`scan.Study.book`), V[SR] des essais ramenée à une échelle de temps commune (`verdict.sharpe_variance`) ; 4 fiches (`tm_trend`, `tm_channel`, `tm_momentum_slow`, `tm_momentum_long_only`, 28 essais, N = 105) | livré |
 | 79 | 10 · Timing | `live/paper_timing.py` + minuteur (si un candidat passe) | à faire |
+
+**Phase 11 — Multi-actifs, décidée le 2026-10-14** (« élargir notre monde, ne pas se baser sur le BTC uniquement ») : 45 marchés mondiaux en séries quotidiennes, mêmes règles statistiques, recherche et paper uniquement ; spécification : `docs/SPEC_MULTI_ACTIFS.md`. Validation fichier par fichier levée pour cette recherche.
+
+| # | Phase | Fichier | Statut |
+|---|---|---|---|
+| 80 | 11 · Multi-actifs | `docs/SPEC_MULTI_ACTIFS.md` | validé d'office |
+| 81 | 11 · Multi-actifs | `timing/panel.py`, `timing/portfolio.py`, `timing/verdict.py` généralisés à la barre ; `timing/study.py` (partie commune sortie de `scan.py`) ; poids inverses de la volatilité, panier de référence | livré |
+| 82 | 11 · Multi-actifs | `core/config.py` + `config/markets.yaml` (`MarketsConfig`), `core/paths.py` (`markets_daily`, `markets_holdout`) | livré |
+| 83 | 11 · Multi-actifs | `data/yahoo.py` | livré |
+| 84 | 11 · Multi-actifs | `markets/daily_panel.py` | livré |
+| 85 | 11 · Multi-actifs | `markets/multi_asset.py` + `hypotheses/multi/*.yaml` : 5 fiches, 23 essais, écrites avant tout test (+ volet `multi`, univers `markets`) | livré (figées) |
 
 Écart au plan de la spec (§2, §3, §9) : les bougies **horaires** suffisent pour les horizons ≥ 1 h ; le gate v1 a déjà montré que ≤ 15 min ne passe pas en spot, et la grille des fiches commence à 1 h. Les bougies 1 min et le gate séparé ne sont faits que si un résultat le demande ; le coût est compté essai par essai (frais, spread mesuré, glissement, financement).
 

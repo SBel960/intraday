@@ -25,6 +25,7 @@ def _panel(funding_a: list[float] | None = None) -> tuple[pl.DataFrame, pl.Serie
                 {
                     "symbol": sym,
                     "t_ms": T0 + i * H,
+                    "bar": (T0 + i * H) // H,
                     "open": o,
                     "high": o,
                     "close": o,
@@ -99,11 +100,48 @@ def test_signed_book_trades_only_with_the_sign() -> None:
     ]
 
 
-def test_rebalance_every_h_hours_from_epoch() -> None:
-    panel = pl.DataFrame({"t_ms": [T0 + 1 * H, T0 + 9 * H]})
-    assert pf.rebalance_times(panel, 4).to_list() == [T0 + 4 * H, T0 + 8 * H]
+def test_rebalance_every_h_bars_from_epoch() -> None:
+    """Barres multiples de h présentes dans le panel ; T0 (2024-01-01) = heure 473 352, ÷ 4."""
+    panel = pl.DataFrame({"t_ms": [T0 + i * H for i in range(10)]}).with_columns(
+        (pl.col("t_ms") // H).alias("bar")
+    )
+    got = pf.rebalance_times(panel, 4)
+    assert got["t_ms"].to_list() == [T0, T0 + 4 * H, T0 + 8 * H]
     with pytest.raises(DataError, match="vide"):
-        pf.rebalance_times(pl.DataFrame({"t_ms": []}, schema={"t_ms": pl.Int64}), 4)
+        pf.rebalance_times(panel.clear(), 4)
+
+
+def test_inverse_vol_weights_and_basket() -> None:
+    """A oscille de ±2 %, B de ±1 % : σ_B = σ_A / 2 ⇒ B pèse 2 fois plus (⅔ contre ⅓).
+    Le panier achète tout, avec les mêmes poids, sans coûts."""
+    rows = []
+    for sym, amp in (("A", 0.02), ("B", 0.01)):
+        price = 100.0
+        for i in range(8):
+            price *= 1 + (amp if i % 2 else -amp)
+            rows.append(
+                {
+                    "symbol": sym,
+                    "t_ms": T0 + i * H,
+                    "bar": (T0 + i * H) // H,
+                    "open": price,
+                    "high": price,
+                    "close": price,
+                    "funding": 0.0,
+                    "eligible": True,
+                }
+            )
+    df = pl.DataFrame(rows)
+    ones = pl.Series([1.0] * df.height)
+    book = pf.Book(1, 2, 0, {}, 0.0, signed=True, weighting="inverse_vol", vol_lookback=4)
+    w = pf.weights(df, ones, book).filter(pl.col("t_ms") == T0 + 5 * H)
+    assert w.select("symbol", "w").rows() == [
+        ("A", pytest.approx(1 / 3, rel=0.02)),
+        ("B", pytest.approx(2 / 3, rel=0.02)),
+    ]
+    bench = pf.basket(df, 1, 4)
+    held = pf.period_returns(df, ones, book)
+    assert bench["bench"].to_list() == pytest.approx(held["gross"].to_list())
 
 
 def test_leg_costs_and_book_checks() -> None:
@@ -120,6 +158,8 @@ def test_leg_costs_and_book_checks() -> None:
         pf.Book(1, 0, 0, {}, 0.0)
     with pytest.raises(DataError, match="horizon"):
         pf.Book(0, 1, 1, {}, 0.0)
+    with pytest.raises(DataError, match="volatilité"):
+        pf.Book(1, 1, 1, {}, 0.0, vol_lookback=1)
 
 
 def test_buy_and_hold() -> None:
@@ -144,6 +184,7 @@ def test_short_liquidated_when_peak_doubles_even_if_price_falls_back() -> None:
                 {
                     "symbol": sym,
                     "t_ms": T0 + i * H,
+                    "bar": (T0 + i * H) // H,
                     "open": opens[i],
                     "high": highs[i],
                     "close": opens[i],
@@ -167,6 +208,7 @@ def test_loss_capped_at_the_stake_without_peak_data() -> None:
         {
             "symbol": "A",
             "t_ms": T0 + i * H,
+            "bar": (T0 + i * H) // H,
             "open": o,
             "high": o,
             "close": o,

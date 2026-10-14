@@ -1,0 +1,31 @@
+id: mk_channel
+title: Canal de Donchian multi-actifs (règle des turtles, 20 et 55 jours)
+volet: multi
+created: "2026-10-14"
+mechanism: >-
+  Les « turtles » (1983) achetaient la sortie par le haut d'un range de 20 ou 55 jours et
+  vendaient la sortie par le bas, sur tous les marchés à terme : stops des vendeurs et
+  acheteurs de cassure prolongent le mouvement. Position dans le range, centrée ; achat en
+  moitié haute, vente en moitié basse, poids inverses de la volatilité.
+horizon_s: 1814400
+universe: markets
+features: [high_1d, low_1d, close_1d]
+parameters:
+  - name: lookback_d
+    values: [20, 55, 126]
+  - name: horizon_d
+    values: [5, 21]
+  - name: signed
+    values: [1]
+  - name: n_long
+    values: [50]
+  - name: n_short
+    values: [50]
+cost_round_trip_frac: 0.0015
+min_edge_frac: 0.03
+edge_basis: per_year
+abandon: >-
+  Abandon si DSR < 0,95 sur les essais du volet multi, si l'écart de Sharpe avec le panier de
+  tous les marchés (poids inverses de la volatilité) n'a pas un IC bootstrap à 95 %
+  strictement positif, ou si le résultat ne tient pas sur 3 années et sur les deux moitiés des
+  marchés. Hold-out (depuis 2024-10-01) lu une seule fois, pour le meilleur candidat.

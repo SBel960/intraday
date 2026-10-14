@@ -61,6 +61,16 @@ class DataPaths:
         return self.meta / "timing_holdout.jsonl"
 
     @property
+    def markets_holdout(self) -> Path:
+        """Registre du hold-out du volet multi-actifs : une seule entrée permise."""
+        return self.meta / "markets_holdout.jsonl"
+
+    def markets_daily(self, ticker: str) -> Path:
+        """Série quotidienne d'un marché du volet multi-actifs : ``markets/daily/{ticker}.parquet``
+        (ticker de la source, ex. ``SPY``, ``BTC-USD``)."""
+        return self.root / "markets" / "daily" / _symbol_file(ticker)
+
+    @property
     def perp_spreads(self) -> Path:
         """Relevés de spreads des contrats perpétuels USDⓈ-M (volet timing)."""
         return self.meta / "perp_spreads.jsonl"

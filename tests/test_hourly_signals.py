@@ -33,7 +33,7 @@ def _panel(closes: list[float], symbol: str = "AUSDT", **cols: list[float]) -> p
 
 
 def _values(df: pl.DataFrame, name: str, k: float = 2, horizon: int = 1) -> list[float | None]:
-    return sg.compute(df, name, {"lookback_h": k}, horizon).to_list()
+    return sg.compute(df, name, k, horizon).to_list()
 
 
 def test_momentum_and_reversal_by_hand() -> None:
@@ -98,7 +98,7 @@ def test_btc_catchup_by_hand() -> None:
     btc = _panel([100.0, 100.0, 110.0], symbol="BTCUSDT")
     alt = _panel([10.0, 10.0, 10.5], symbol="AUSDT")
     df = sg.with_reference(pl.concat([alt, btc]), "BTCUSDT")
-    got = df.with_columns(sg.compute(df, "btc_catchup", {"lookback_h": 2}, 1).alias("s"))
+    got = df.with_columns(sg.compute(df, "btc_catchup", 2, 1).alias("s"))
     alt_s = got.filter(pl.col("symbol") == "AUSDT")["s"].to_list()
     assert alt_s[2] == pytest.approx(math.log(1.1) - math.log(1.05))
     assert got.filter(pl.col("symbol") == "BTCUSDT")["s"].to_list()[2] == pytest.approx(0.0)
@@ -114,12 +114,12 @@ def test_seasonality_uses_only_past_weeks() -> None:
     opens[2] = 101.0  # entrée open(1)=100, sortie open(2)=101 : +1 % décidé en t=0
     opens[week + 2] = 103.0
     df = _panel(opens)
-    s = sg.compute(df, "seasonality", {}, 1).to_list()
+    s = sg.compute(df, "seasonality", None, 1).to_list()
     assert s[0] is None
     assert s[week] == pytest.approx(0.01)
     assert s[2 * week] == pytest.approx(0.02)
     with pytest.raises(DataError, match="trop long"):
-        sg.compute(df, "seasonality", {}, week)
+        sg.compute(df, "seasonality", None, week)
 
 
 @pytest.mark.parametrize("name", [n for n in sg.NAMES if n != "btc_catchup"])
@@ -154,6 +154,6 @@ def test_causal_future_change_does_not_move_signal(name: str) -> None:
 def test_bad_parameters() -> None:
     df = _panel([1.0, 2.0])
     with pytest.raises(DataError, match="signal inconnu"):
-        sg.compute(df, "magie", {"lookback_h": 1}, 1)
-    with pytest.raises(DataError, match="entier"):
-        sg.compute(df, "momentum", {"lookback_h": 1.5}, 1)
+        sg.compute(df, "magie", 1, 1)
+    with pytest.raises(DataError, match="entière"):
+        sg.compute(df, "momentum", 1.5, 1)

@@ -374,3 +374,19 @@ def test_tier_for_rejects_non_decimal(config_dir: Path, net_deposits: object) ->
     """Pas de flottant pour de l'argent : on refuse au lieu de convertir en silence."""
     with pytest.raises(ConfigError, match="doit être un Decimal"):
         load_base(config_dir / "base.yaml").tier_for(net_deposits)  # type: ignore[arg-type]
+
+
+def test_markets_config_costs_and_checks(config_dir: Path) -> None:
+    cfg = load_config(config_dir).markets
+    assert cfg.cost_of("AAA") == 0.0005 and cfg.cost_of("BTC-USD") == 0.0015
+    with pytest.raises(ConfigError, match="inconnu"):
+        cfg.cost_of("ZZZ")
+    _edit(config_dir / "markets.yaml", ["assets", 0, "asset_class"], "bonbons")
+    with pytest.raises(ConfigError, match="classe inconnue"):
+        load_config(config_dir)
+
+
+def test_repo_markets_config_is_valid() -> None:
+    cfg = load_config(REPO_CONFIG).markets
+    assert len(cfg.assets) == 45
+    assert {a.asset_class for a in cfg.assets} == {c.name for c in cfg.classes}

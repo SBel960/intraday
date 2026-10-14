@@ -1,0 +1,25 @@
+id: mk_momentum
+title: Momentum transversal entre marchés (5 plus forts achetés, 5 plus faibles vendus)
+volet: multi
+created: "2026-10-14"
+mechanism: >-
+  Les capitaux se déplacent lentement d'une classe d'actifs à l'autre (Asness, Moskowitz et
+  Pedersen, « Value and Momentum Everywhere », 2013) : les marchés qui ont le mieux fait sur 3
+  à 12 mois continuent de faire mieux que les plus faibles, quelle que soit la direction du
+  marché global.
+horizon_s: 1814400
+universe: markets
+features: [close_1d]
+parameters:
+  - name: lookback_d
+    values: [63, 126, 252]
+  - name: horizon_d
+    values: [5, 21]
+cost_round_trip_frac: 0.0015
+min_edge_frac: 0.03
+edge_basis: per_year
+abandon: >-
+  Abandon si DSR < 0,95 sur les essais du volet multi, si l'écart de Sharpe avec le panier de
+  tous les marchés (poids inverses de la volatilité) n'a pas un IC bootstrap à 95 %
+  strictement positif, ou si le résultat ne tient pas sur 3 années et sur les deux moitiés des
+  marchés. Hold-out (depuis 2024-10-01) lu une seule fois, pour le meilleur candidat.

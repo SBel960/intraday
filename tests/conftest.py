@@ -141,10 +141,36 @@ TIMING: dict[str, object] = {
     "max_trials": 50,
 }
 
+MARKETS: dict[str, object] = {
+    "chart_url": "https://query1.finance.yahoo.com/v8/finance/chart/",
+    "request_interval_s": 0.0,
+    "start_date": "2020-01-01",
+    "classes": [
+        {"name": "actions", "cost_one_way_frac": 0.0005},
+        {"name": "crypto", "cost_one_way_frac": 0.0015},
+    ],
+    "assets": [
+        {"ticker": "AAA", "asset_class": "actions", "label": "A"},
+        {"ticker": "BBB", "asset_class": "actions", "label": "B"},
+        {"ticker": "CCC", "asset_class": "actions", "label": "C"},
+        {"ticker": "BTC-USD", "asset_class": "crypto", "label": "Bitcoin"},
+    ],
+    "trading_days_per_year": 250,
+    "warmup_days": 5,
+    "volume_lookback_days": 3,
+    "min_volume_usd": 1000.0,
+    "spike_log_return": 0.25,
+    "vol_lookback_days": 5,
+    "n_long": 1,
+    "n_short": 1,
+    "holdout_start": "2021-06-01",
+    "max_trials": 20,
+}
+
 
 @pytest.fixture
 def config_dir(tmp_path: Path) -> Path:
-    """Écrit les quatre YAML valides ; la racine des données est ``tmp_path/data``."""
+    """Écrit les cinq YAML valides ; la racine des données est ``tmp_path/data``."""
     cfg = tmp_path / "config"
     cfg.mkdir()
     base = {
@@ -157,6 +183,7 @@ def config_dir(tmp_path: Path) -> Path:
         ("intraday", INTRADAY),
         ("longterm", LONGTERM),
         ("timing", TIMING),
+        ("markets", MARKETS),
     ):
         (cfg / f"{name}.yaml").write_text(yaml.safe_dump(content), encoding="utf-8")
     return cfg

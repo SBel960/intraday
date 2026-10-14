@@ -1,10 +1,11 @@
-"""Signaux horaires du volet timing : un nombre par (contrat, heure), **orienté** (plus grand ⇒
-hausse attendue plus forte), calculé avec les seules bougies closes jusqu'à ``t`` inclus.
+"""Signaux par barre (heure des perpétuels, jour ouvré des marchés) : un nombre par (actif,
+barre), **orienté** (plus grand ⇒ hausse attendue plus forte), calculé avec les seules bougies
+closes jusqu'à ``t`` inclus. ``seasonality`` et ``volume_shock`` supposent des barres horaires.
 
-Chaque signal correspond à une fiche ``hypotheses/timing/*.yaml`` (mécanisme écrit avant les
-tests) ; ``lookback_h`` = k heures. Les expressions s'évaluent sur un panel trié par
-(``symbol``, ``t_ms``) à grille complète (``timing/panel.py``) : ``shift(k)`` = k heures. Un trou
-dans la fenêtre donne un signal nul (contrat ignoré à cette heure).
+Chaque signal correspond à des fiches ``hypotheses/{timing,multi}/*.yaml`` (mécanisme écrit
+avant les tests) ; fenêtre de k barres. Les expressions s'évaluent sur un panel trié par
+(``symbol``, ``t_ms``) à grille complète (``timing/panel.py``, ``markets/daily_panel.py``) :
+``shift(k)`` = k barres. Un trou dans la fenêtre donne un signal nul (actif ignoré à ce moment).
 
 | nom | formule (par contrat) |
 |---|---|
@@ -26,7 +27,7 @@ longs) : ``ALIASES`` donne le signal qu'elles utilisent (``trend`` ⇒ ``momentu
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 
 import polars as pl
 
@@ -119,20 +120,17 @@ def seasonality(panel: pl.DataFrame, horizon_h: int) -> pl.Series:
     return with_r.select(pl.when(count > 0).then(total / count).alias("signal"))["signal"]
 
 
-def compute(
-    panel: pl.DataFrame, name: str, params: Mapping[str, float], horizon_h: int
-) -> pl.Series:
-    """Valeurs du signal ``name`` (ou de son alias) sur ``panel`` (paramètre ``lookback_h``,
-    sauf ``seasonality`` qui dépend de l'horizon), dans l'ordre des lignes."""
+def compute(panel: pl.DataFrame, name: str, lookback: float | None, horizon: int) -> pl.Series:
+    """Valeurs du signal ``name`` (ou de son alias) sur ``panel``, dans l'ordre des lignes.
+    ``lookback`` : k barres (entier ≥ 1) ; ``seasonality`` n'en a pas et dépend de l'horizon."""
     name = resolve(name)
     if name == "seasonality":
-        return seasonality(panel, horizon_h)
+        return seasonality(panel, horizon)
     if name not in _BY_LOOKBACK:
         raise DataError(f"signal inconnu : {name!r} (connus : {', '.join(NAMES)})")
-    k = int(params["lookback_h"])
-    if k < 1 or k != params["lookback_h"]:
-        raise DataError(f"{name} : lookback_h entier ≥ 1 attendu (reçu {params['lookback_h']})")
-    return panel.select(_BY_LOOKBACK[name](k).alias("signal"))["signal"]
+    if lookback is None or lookback < 1 or int(lookback) != lookback:
+        raise DataError(f"{name} : fenêtre entière ≥ 1 barre attendue (reçu {lookback})")
+    return panel.select(_BY_LOOKBACK[name](int(lookback)).alias("signal"))["signal"]
 
 
 def with_reference(panel: pl.DataFrame, reference: str) -> pl.DataFrame:

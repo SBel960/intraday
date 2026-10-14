@@ -1,0 +1,24 @@
+id: mk_reversal
+title: Retour à la moyenne d'une semaine entre marchés
+volet: multi
+created: "2026-10-14"
+mechanism: >-
+  Les ventes forcées et les rééquilibrages de fin de semaine poussent trop loin les marchés
+  qui viennent de chuter : sur 1 semaine, les plus grands perdants rebondissent par rapport
+  aux plus grands gagnants (fournisseurs de liquidité rémunérés).
+horizon_s: 432000
+universe: markets
+features: [close_1d]
+parameters:
+  - name: lookback_d
+    values: [5]
+  - name: horizon_d
+    values: [5]
+cost_round_trip_frac: 0.0015
+min_edge_frac: 0.03
+edge_basis: per_year
+abandon: >-
+  Abandon si DSR < 0,95 sur les essais du volet multi, si l'écart de Sharpe avec le panier de
+  tous les marchés (poids inverses de la volatilité) n'a pas un IC bootstrap à 95 %
+  strictement positif, ou si le résultat ne tient pas sur 3 années et sur les deux moitiés des
+  marchés. Hold-out (depuis 2024-10-01) lu une seule fois, pour le meilleur candidat.

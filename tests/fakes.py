@@ -239,3 +239,56 @@ def timing_market(paths: DataPaths) -> None:
         out = paths.lt_futures("klines_1h", sym)
         out.parent.mkdir(parents=True, exist_ok=True)
         df.write_parquet(out)
+
+
+MARKETS_T0 = date_to_ms("2020-01-06")  # lundi
+MARKETS_DAYS = 3 * 365  # jours civils (week-ends retirés par le panel)
+
+
+def markets_fiche(folder: Path, ident: str, lookbacks: list[int], horizons: list[int]) -> Path:
+    data = {
+        "id": ident,
+        "title": "essai multi-actifs de test",
+        "volet": "multi",
+        "created": "2026-10-14",
+        "mechanism": "Mécanisme de test suffisamment long pour passer la validation.",
+        "horizon_s": 86400,
+        "universe": "markets",
+        "features": ["close_1d"],
+        "parameters": [
+            {"name": "lookback_d", "values": lookbacks},
+            {"name": "horizon_d", "values": horizons},
+        ],
+        "cost_round_trip_frac": 0.001,
+        "min_edge_frac": 0.03,
+        "edge_basis": "per_year",
+        "abandon": "test",
+    }
+    path = folder / f"{ident}.yaml"
+    path.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    return path
+
+
+def markets_series(paths: DataPaths) -> None:
+    """Séries quotidiennes (week-ends compris, comme la source) des 4 marchés de la config de
+    test : AAA monte, BBB baisse, CCC oscille, BTC-USD onde lente ; volumes larges."""
+    shapes = {
+        "AAA": lambda i: 100 * (1.0005**i),
+        "BBB": lambda i: 100 * (0.9997**i),
+        "CCC": lambda i: 100 * (1 + 0.05 * math.sin(i / 9)),
+        "BTC-USD": lambda i: 100 * (1 + 0.3 * math.sin(i / 60)),
+    }
+    for ticker, shape in shapes.items():
+        closes = [shape(i) for i in range(MARKETS_DAYS)]
+        out = paths.markets_daily(ticker)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        pl.DataFrame(
+            {
+                "t_ms": [MARKETS_T0 + i * 86_400_000 for i in range(MARKETS_DAYS)],
+                "open": closes,
+                "high": [c * 1.01 for c in closes],
+                "low": [c * 0.99 for c in closes],
+                "close": closes,
+                "volume": [1e6] * MARKETS_DAYS,
+            }
+        ).write_parquet(out)

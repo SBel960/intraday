@@ -29,11 +29,12 @@ LAYERS = {
     "backtest": 4,
     "events": 4,
     "timing": 4,
+    "markets": 5,
     "live": 5,
 }
 MAX_LINES = 300
 TOO_BIG_ALLOWED = {"core/config.py"}  # validé tel quel par le propriétaire (2026-09-25)
-DATA_DIRS = {"meta", "logs", "reports", "raw", "bronze", "silver", "lt", "events"}
+DATA_DIRS = {"meta", "logs", "reports", "raw", "bronze", "silver", "lt", "events", "markets"}
 
 
 def _rel(path: Path) -> str:
