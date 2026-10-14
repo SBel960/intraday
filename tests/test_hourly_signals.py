@@ -74,6 +74,16 @@ def test_funding_breakout_low_volatility_by_hand() -> None:
     assert vol[2] == pytest.approx(-expected)
 
 
+def test_channel_and_aliases_by_hand() -> None:
+    """Canal sur 2 h : t1 [100, 110] clôture 110 ⇒ +½ ; t2 [110, 99] clôture 99 ⇒ −½ ;
+    t3 [99, 120] ⇒ +½. Range nul ⇒ pas de signal. ``trend`` = la formule du momentum."""
+    df = _panel([100, 110, 99, 120])
+    assert _values(df, "channel")[1:] == pytest.approx([0.5, -0.5, 0.5])
+    assert _values(_panel([1.0, 1.0]), "channel") == [None, None]
+    for alias in sg.ALIASES:
+        assert _values(df, alias) == _values(df, "momentum")
+
+
 def test_volume_shock_by_hand() -> None:
     """Base : 30 jours à 10/h. Puis 2 h à 30/h, prix en hausse : ln(60 / (2 · 10)) = ln 3."""
     n = sg.BASELINE_H + 2

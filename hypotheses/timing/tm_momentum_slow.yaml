@@ -1,0 +1,21 @@
+id: tm_momentum_slow
+title: Momentum transversal lent (2 à 4 semaines, rééquilibrage de 3 à 7 jours)
+volet: timing
+created: "2026-10-14"
+mechanism: >-
+  Vague 2. En vague 1, le momentum transversal est le seul signal positif, et ses frais
+  pèsent lourd (67 %/an à 8 h). La littérature sur les cryptos trouve la continuation la plus
+  nette entre 1 et 4 semaines ; un rééquilibrage plus rare divise les frais.
+horizon_s: 604800
+universe: perp
+features: [close_1h]
+parameters:
+  - name: lookback_h
+    values: [336, 720]
+  - name: horizon_h
+    values: [72, 168]
+cost_round_trip_frac: 0.0022
+min_edge_frac: 0.10
+edge_basis: per_year
+abandon: >-
+  Mêmes critères que tm_momentum (vague 1).

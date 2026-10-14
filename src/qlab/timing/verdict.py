@@ -54,6 +54,17 @@ def halves(panel: pl.DataFrame) -> dict[str, pl.DataFrame]:
     }
 
 
+def sharpe_variance(registry: TrialRegistry, periods_per_year: int) -> float:
+    """V[SR] du DSR à l'échelle de ``periods_per_year``. Les essais du volet n'ont pas la même
+    période (1 h à 1 semaine) : chaque Sharpe par période est annualisé avec sa propre fréquence
+    puis ramené à celle de l'essai jugé ; sans cela, les essais horaires gonflent SR*."""
+    rescaled = [
+        t.result.sharpe * np.sqrt(t.result.periods_per_year / periods_per_year)
+        for t in registry.latest(VOLET).values()
+    ]
+    return float(np.var(rescaled, ddof=1)) if len(rescaled) > 1 else 0.0
+
+
 def evidence(
     study: scan.Study,
     hyp: Hypothesis,
@@ -71,9 +82,6 @@ def evidence(
         sub = sub.join(bench, on="t_ms", how="inner")
         per_asset[label] = (sub["net"].to_numpy(), sub["bench"].fill_null(0.0).to_numpy())
     years = [date_str(t)[:4] for t in out["t_ms"].to_list()]
-    variance = (
-        float(np.var(registry.sharpes(VOLET), ddof=1)) if registry.n_trials(VOLET) > 1 else 0.0
-    )
     return rr.Evidence(
         f"{hyp.id} {', '.join(f'{k}={int(v)}' for k, v in params.items())}",
         out["net"].to_numpy(),
@@ -81,7 +89,7 @@ def evidence(
         years,
         per_asset,
         registry.n_trials(VOLET),
-        variance,
+        sharpe_variance(registry, study.periods_per_year(h)),
         study.periods_per_year(h),
     )
 
@@ -91,7 +99,9 @@ def oracle_sharpe(study: scan.Study, horizon_h: int) -> float:
     Sharpe énorme avec le même moteur et les mêmes coûts ; sinon le pipeline est suspect."""
     peek = study.panel.select(pn.forward_return(horizon_h).alias("s"))["s"]
     out = pn.in_sample(
-        period_returns(study.panel, peek, study.book(horizon_h)), study.holdout_ms, horizon_h
+        period_returns(study.panel, peek, study.book({"horizon_h": horizon_h})),
+        study.holdout_ms,
+        horizon_h,
     )
     r = out["net"].to_numpy()
     return float(r.mean() / r.std(ddof=1) * np.sqrt(study.periods_per_year(horizon_h)))

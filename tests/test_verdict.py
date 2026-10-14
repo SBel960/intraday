@@ -12,6 +12,8 @@ from fakes import timing_fiche, timing_market
 from qlab.core.config import load_config
 from qlab.core.paths import DataPaths
 from qlab.core.records import read_records
+from qlab.research.hypothesis import load_hypothesis
+from qlab.research.trials import TrialRegistry, TrialResult
 from qlab.timing import scan, verdict
 
 
@@ -67,3 +69,14 @@ def test_criteria_block_in_periods(config_dir: Path) -> None:
     assert verdict.timing_criteria(config, 1).mean_block == pytest.approx(240)
     assert verdict.timing_criteria(config, 24).mean_block == pytest.approx(10)
     assert verdict.timing_criteria(config, 1000).mean_block == pytest.approx(1)
+
+
+def test_sharpe_variance_on_a_common_time_scale(tmp_path: Path) -> None:
+    """Sharpe 0,1 par période à 400 périodes/an = 0,2 à 100 périodes/an (même Sharpe annuel 2) :
+    ramenés à 100, les essais valent 0,2 ; 0,2 ; 0 ⇒ variance (ddof 1) = 0,04/3."""
+    hyp = load_hypothesis(timing_fiche(tmp_path, "tm_momentum", [1, 4, 8]))
+    registry = TrialRegistry(tmp_path / "trials.jsonl")
+    for h, sharpe, ppy in ((1, 0.1, 400), (4, 0.2, 100), (8, 0.0, 100)):
+        result = TrialResult(sharpe, 50, 0.0, 3.0, ppy)
+        registry.record(hyp, {"lookback_h": 2, "horizon_h": h}, result, ts_ms=1)
+    assert verdict.sharpe_variance(registry, 100) == pytest.approx(0.04 / 3)

@@ -17,7 +17,11 @@ dans la fenêtre donne un signal nul (contrat ignoré à cette heure).
 | ``btc_catchup`` | momentum_k(référence) − momentum_k(contrat) (retard sur BTC) |
 | ``breakout`` | close_t / max(high des k h précédentes) − 1 |
 | ``low_volatility`` | − écart-type des rendements log horaires sur k h |
+| ``channel`` | position de close_t dans [min low, max high] des k h (canal de Donchian) − ½ |
 | ``seasonality`` | rendement moyen à l'horizon h, mêmes heures de la semaine, semaines passées |
+
+Fiches qui gardent une formule et changent le **portefeuille** (signé, long seul, horizons
+longs) : ``ALIASES`` donne le signal qu'elles utilisent (``trend`` ⇒ ``momentum``).
 """
 
 from __future__ import annotations
@@ -70,6 +74,11 @@ def _low_volatility(k: int) -> pl.Expr:
     return -_per(pl.col("close").log().diff().rolling_std(k))
 
 
+def _channel(k: int) -> pl.Expr:
+    lo, hi = pl.col("low").rolling_min(k), pl.col("high").rolling_max(k)
+    return _per(pl.when(hi > lo).then((pl.col("close") - lo) / (hi - lo) - 0.5))
+
+
 def _funding_contrarian(k: int) -> pl.Expr:
     return -_per(pl.col("funding").rolling_sum(k))
 
@@ -84,8 +93,15 @@ _BY_LOOKBACK: dict[str, Callable[[int], pl.Expr]] = {
     "btc_catchup": _catchup,
     "breakout": _breakout,
     "low_volatility": _low_volatility,
+    "channel": _channel,
 }
-NAMES = (*_BY_LOOKBACK, "seasonality")
+ALIASES = {"trend": "momentum", "momentum_slow": "momentum", "momentum_long_only": "momentum"}
+NAMES = (*_BY_LOOKBACK, "seasonality", *ALIASES)
+
+
+def resolve(name: str) -> str:
+    """Signal réellement calculé pour ``name`` (lui-même, ou la formule de son alias)."""
+    return ALIASES.get(name, name)
 
 
 def seasonality(panel: pl.DataFrame, horizon_h: int) -> pl.Series:
@@ -106,8 +122,9 @@ def seasonality(panel: pl.DataFrame, horizon_h: int) -> pl.Series:
 def compute(
     panel: pl.DataFrame, name: str, params: Mapping[str, float], horizon_h: int
 ) -> pl.Series:
-    """Valeurs du signal ``name`` sur ``panel`` (paramètre ``lookback_h``, sauf
-    ``seasonality`` qui dépend de l'horizon), dans l'ordre des lignes."""
+    """Valeurs du signal ``name`` (ou de son alias) sur ``panel`` (paramètre ``lookback_h``,
+    sauf ``seasonality`` qui dépend de l'horizon), dans l'ordre des lignes."""
+    name = resolve(name)
     if name == "seasonality":
         return seasonality(panel, horizon_h)
     if name not in _BY_LOOKBACK:

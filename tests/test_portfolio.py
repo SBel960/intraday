@@ -78,6 +78,27 @@ def test_long_only_book() -> None:
     assert w.select("t_ms", "symbol", "w").rows() == [(T0, "A", 1.0), (T0 + H, "B", 1.0)]
 
 
+def test_signed_book_trades_only_with_the_sign() -> None:
+    """Signé : achat si signal > 0, vente si < 0, le reste en cash. Signaux tous positifs ⇒
+    aucune vente ; 2 lignes de chaque côté pour 3 contrats ⇒ livre partiel (¼ par ligne)."""
+    panel, signal = _panel()
+    centred = signal - 2  # t0 : A +1, B −1, C 0 ; t1 : A −1, B +1, C 0
+    w = pf.weights(panel, centred, pf.Book(1, 1, 1, COSTS, 0.0, signed=True))
+    assert w.select("t_ms", "symbol", "w").rows() == [
+        (T0, "A", 0.5),
+        (T0, "B", -0.5),
+        (T0 + H, "A", -0.5),
+        (T0 + H, "B", 0.5),
+    ]
+    w = pf.weights(panel, signal, pf.Book(1, 1, 1, COSTS, 0.0, signed=True))
+    assert w.select("t_ms", "symbol", "w").rows() == [(T0, "A", 0.5), (T0 + H, "B", 0.5)]
+    w = pf.weights(panel, centred, pf.Book(1, 2, 2, COSTS, 0.0, signed=True))
+    assert w.filter(pl.col("t_ms") == T0).select("symbol", "w").rows() == [
+        ("A", 0.25),
+        ("B", -0.25),
+    ]
+
+
 def test_rebalance_every_h_hours_from_epoch() -> None:
     panel = pl.DataFrame({"t_ms": [T0 + 1 * H, T0 + 9 * H]})
     assert pf.rebalance_times(panel, 4).to_list() == [T0 + 4 * H, T0 + 8 * H]

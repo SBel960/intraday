@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import polars as pl
 import pytest
 from fakes import TIMING_T0, timing_fiche, timing_market
 
@@ -56,3 +57,11 @@ def test_budget_checked_before_running(config_dir: Path, tmp_path: Path) -> None
     fiches.mkdir()
     timing_fiche(fiches, "tm_momentum", list(range(1, 52)))  # 51 essais > 50 (config de test)
     assert scan.main(["--config", str(config_dir), "--fiches", str(fiches), "run"]) == 1
+
+
+def test_book_from_card_parameters_else_config() -> None:
+    study = scan.Study(pl.DataFrame(), {}, 0.001, 3, 3, 0, 360, "")
+    plain = study.book({"horizon_h": 4})
+    assert (plain.horizon_h, plain.n_long, plain.n_short, plain.signed) == (4, 3, 3, False)
+    custom = study.book({"horizon_h": 8, "lookback_h": 2, "n_short": 0, "signed": 1})
+    assert (custom.horizon_h, custom.n_long, custom.n_short, custom.signed) == (8, 3, 0, True)

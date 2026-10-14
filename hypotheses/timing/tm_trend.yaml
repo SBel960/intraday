@@ -1,0 +1,27 @@
+id: tm_trend
+title: Suivi de tendance signé (acheter ce qui monte, vendre ce qui baisse, sinon cash)
+volet: timing
+created: "2026-10-14"
+mechanism: >-
+  Vague 2. Le momentum transversal de la vague 1 annule la direction du marché ; or la tendance
+  des cryptos est surtout commune (cycles haussiers et baissiers longs). Ici, un contrat n'est
+  acheté que si sa tendance propre est positive et vendu que si elle est négative ; le reste
+  est en cash. Le portefeuille peut donc être tout acheteur en marché haussier, tout vendeur en
+  krach, ou vide : c'est le suivi de tendance des CTA (time-series momentum).
+horizon_s: 259200
+universe: perp
+features: [close_1h]
+parameters:
+  - name: lookback_h
+    values: [72, 168, 336, 720]
+  - name: horizon_h
+    values: [24, 72, 168]
+  - name: signed
+    values: [1]
+cost_round_trip_frac: 0.0022
+min_edge_frac: 0.10
+edge_basis: per_year
+abandon: >-
+  Abandon si DSR < 0,95 sur tous les essais du volet, si l'écart de Sharpe avec le buy & hold
+  BTC n'a pas un IC bootstrap à 95 % strictement positif, ou si le résultat ne tient pas sur 3
+  années et sur les deux moitiés de l'univers. Hold-out lu une seule fois.

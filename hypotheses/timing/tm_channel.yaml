@@ -1,0 +1,24 @@
+id: tm_channel
+title: Canal de Donchian signé (haut du range ⇒ achat, bas du range ⇒ vente)
+volet: timing
+created: "2026-10-14"
+mechanism: >-
+  Vague 2. Règle des « turtles » : un prix qui sort par le haut de son range de plusieurs jours
+  attire les acheteurs de cassure et les rachats des vendeurs à découvert (stops), et
+  inversement par le bas. Signal : position de la clôture dans [plus bas, plus haut] des k
+  heures, centrée ; portefeuille signé (moitié haute achetée, moitié basse vendue, sinon cash).
+horizon_s: 259200
+universe: perp
+features: [high_1h, low_1h, close_1h]
+parameters:
+  - name: lookback_h
+    values: [168, 480, 720]
+  - name: horizon_h
+    values: [24, 72]
+  - name: signed
+    values: [1]
+cost_round_trip_frac: 0.0022
+min_edge_frac: 0.10
+edge_basis: per_year
+abandon: >-
+  Mêmes critères que tm_trend (DSR, écart de Sharpe avec BTC, années, moitiés d'univers).

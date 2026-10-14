@@ -3,7 +3,8 @@ comptée dans le registre d'essais, et classée — sur la période **avant** le
 
 Une fiche ``tm_<signal>`` essaie le signal ``<signal>`` (``timing/hourly_signals.py``) avec ses
 ``lookback_h`` et ``horizon_h`` ; portefeuille ``timing/portfolio.py`` (``n_long`` / ``n_short``
-de la config, univers point-in-time, coûts taker mesurés). Un essai déjà enregistré n'est pas
+de la config, sauf si la fiche les fixe dans ses paramètres, comme ``signed`` ; univers
+point-in-time, coûts taker mesurés). Un essai déjà enregistré n'est pas
 recompté (le registre garde la dernière mesure). Le budget ``timing.max_trials`` est vérifié
 **avant** de lancer quoi que ce soit.
 
@@ -17,7 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -53,8 +54,17 @@ class Study:
     days_per_year: int
     spread_note: str
 
-    def book(self, horizon_h: int) -> Book:
-        return Book(horizon_h, self.n_long, self.n_short, self.costs, self.default_cost)
+    def book(self, params: Mapping[str, float]) -> Book:
+        """Portefeuille d'un essai : ``horizon_h`` ; ``n_long``, ``n_short`` et ``signed``
+        (0 / 1) pris dans les paramètres de la fiche s'ils y sont, sinon dans la config."""
+        return Book(
+            int(params["horizon_h"]),
+            int(params.get("n_long", self.n_long)),
+            int(params.get("n_short", self.n_short)),
+            self.costs,
+            self.default_cost,
+            signed=bool(params.get("signed", 0)),
+        )
 
     def periods_per_year(self, horizon_h: int) -> int:
         return round(self.days_per_year * hs.HOURS_PER_DAY / horizon_h)
@@ -106,7 +116,7 @@ def returns_on(
     calculé sur ce panel (le même signal sert à plusieurs horizons)."""
     h = int(params["horizon_h"])
     sig = hs.compute(panel, signal_name(hypothesis), params, h) if signal is None else signal
-    return period_returns(panel, sig, study.book(h))
+    return period_returns(panel, sig, study.book(params))
 
 
 def trial_returns(
@@ -124,7 +134,7 @@ def cached_signal(
     cache: dict[tuple[str, float], pl.Series],
 ) -> pl.Series | None:
     """Signal réutilisable entre horizons (tous sauf la saisonnalité, qui dépend de h)."""
-    name = signal_name(hypothesis)
+    name = hs.resolve(signal_name(hypothesis))
     if name == "seasonality":
         return None
     key = (name, params["lookback_h"])

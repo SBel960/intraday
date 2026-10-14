@@ -133,8 +133,8 @@ intraday/
 │   │   └── classify.py            classement des annonces → drapeaux de risque ; modèle et prompt versionnés
 │   ├── timing/                    phase 10 : meilleur moment d'achat / vente sur les contrats perpétuels (long et short à 1×)
 │   │   ├── panel.py               panel horaire de tous les contrats : grille complète (trous marqués), financement par heure, univers liquide point-in-time, rendements futurs (contrat retiré soldé au dernier prix)
-│   │   ├── hourly_signals.py      10 signaux horaires orientés et causaux (momentum, retour, flux acheteur, choc de volume, financement, rattrapage de BTC, cassure, faible volatilité, saisonnalité)
-│   │   ├── portfolio.py           n_long meilleurs / n_short pires toutes les h heures, poids égaux, levier 1× ; rendements nets (frais taker, ½ spread, glissement, financement)
+│   │   ├── hourly_signals.py      signaux horaires orientés et causaux (momentum, retour, flux acheteur, choc de volume, financement, rattrapage de BTC, cassure, canal de Donchian, faible volatilité, saisonnalité) ; alias des fiches qui changent seulement le portefeuille
+│   │   ├── portfolio.py           n_long meilleurs / n_short pires toutes les h heures (ou signé : selon le signe du signal, le reste en cash), poids égaux, levier 1× ; rendements nets (frais taker, ½ spread, glissement, financement)
 │   │   ├── scan.py                balayage des fiches hypotheses/timing (budget vérifié avant), essais comptés, classement avant hold-out, rapport + JSON
 │   │   └── verdict.py             critères complets (DSR, écart de Sharpe vs buy & hold, années, moitiés d'univers, MinTRL) des meilleurs ; hold-out rejoué une seule fois
 │   └── longterm/
@@ -276,6 +276,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 77 | 10 · Timing | `timing/scan.py` | livré |
 | 78 | 10 · Timing | `timing/verdict.py` (+ `core/paths.py` : `timing_holdout`) | livré |
 | 78 bis | 10 · Timing | `live/timing_state.py` + carte « Recherche timing » du cockpit (`cockpit.py`, `cockpit.html`) | livré |
+| 78 ter | 10 · Timing | Vague 2 : portefeuille signé (`portfolio.Book.signed`), signal `channel` et alias (`hourly_signals.ALIASES`), portefeuille fixé par la fiche (`scan.Study.book`), V[SR] des essais ramenée à une échelle de temps commune (`verdict.sharpe_variance`) ; 4 fiches (`tm_trend`, `tm_channel`, `tm_momentum_slow`, `tm_momentum_long_only`, 28 essais, N = 105) | livré |
 | 79 | 10 · Timing | `live/paper_timing.py` + minuteur (si un candidat passe) | à faire |
 
 Écart au plan de la spec (§2, §3, §9) : les bougies **horaires** suffisent pour les horizons ≥ 1 h ; le gate v1 a déjà montré que ≤ 15 min ne passe pas en spot, et la grille des fiches commence à 1 h. Les bougies 1 min et le gate séparé ne sont faits que si un résultat le demande ; le coût est compté essai par essai (frais, spread mesuré, glissement, financement).

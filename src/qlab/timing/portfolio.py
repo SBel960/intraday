@@ -4,6 +4,9 @@
 contrats éligibles ayant un signal et un prix d'entrée : achat des ``n_long`` plus forts
 signaux, vente à découvert des ``n_short`` plus faibles, poids égaux de ``1 / (n_long +
 n_short)`` (exposition brute 1 : levier 1×). Moins de candidats que de lignes ⇒ à plat.
+Portefeuille **signé** (``Book.signed``) : un achat exige un signal > 0, une vente un signal
+< 0, et les lignes sans candidat restent en cash (exposition ≤ 1, jamais de levier) : tout le
+marché peut être acheté, vendu ou laissé, selon le signe.
 
 Rendement d'une période, par ligne : ``w · (r − f)`` (``r`` : ``panel.forward_return``,
 ``f`` : financement réglé pendant la détention ; l'acheteur paie un taux positif, le vendeur
@@ -32,13 +35,15 @@ from qlab.timing.panel import forward_funding, forward_peak, forward_return
 @dataclass(frozen=True, slots=True)
 class Book:
     """Règles du portefeuille : horizon (h), lignes de chaque côté, coût d'une jambe par
-    contrat (``default_cost`` pour un contrat sans mesure)."""
+    contrat (``default_cost`` pour un contrat sans mesure) ; ``signed`` : achat seulement si
+    signal > 0, vente seulement si signal < 0, le reste en cash."""
 
     horizon_h: int
     n_long: int
     n_short: int
     costs: Mapping[str, float]
     default_cost: float
+    signed: bool = False
 
     def __post_init__(self) -> None:
         if self.horizon_h < 1 or self.n_long < 0 or self.n_short < 0:
@@ -99,15 +104,13 @@ def weights(panel: pl.DataFrame, signal: pl.Series, book: Book) -> pl.DataFrame:
             pl.col("s").rank("ordinal").over("t_ms").alias("bottom"),
             pl.len().over("t_ms").alias("n"),
         )
-        .filter(pl.col("n") >= lines)
     )
-    side = (
-        pl.when(pl.col("top") <= book.n_long)
-        .then(1.0)
-        .when(pl.col("bottom") <= book.n_short)
-        .then(-1.0)
-        .otherwise(0.0)
-    )
+    long_ok, short_ok = pl.col("top") <= book.n_long, pl.col("bottom") <= book.n_short
+    if book.signed:
+        long_ok, short_ok = long_ok & (pl.col("s") > 0), short_ok & (pl.col("s") < 0)
+    else:
+        cand = cand.filter(pl.col("n") >= lines)
+    side = pl.when(long_ok).then(1.0).when(short_ok).then(-1.0).otherwise(0.0)
     held = cand.with_columns((side / lines).alias("w")).filter(pl.col("w") != 0)
     liquidated = (pl.col("w") < 0) & (pl.col("peak") >= 1)
     stake = -pl.col("w").abs()

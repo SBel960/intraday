@@ -1,0 +1,25 @@
+id: tm_momentum_long_only
+title: Momentum acheteur seul (les 3 plus forts, sans vente à découvert)
+volet: timing
+created: "2026-10-14"
+mechanism: >-
+  Vague 2. En vague 1, la jambe vendeuse du momentum souffre des envolées soudaines des petits
+  contrats (liquidations) et paie le financement à contre-sens en marché haussier. Acheter
+  seulement les plus forts garde l'effet de continuation et l'exposition au marché ; la
+  comparaison avec le buy & hold BTC dit si la sélection ajoute quelque chose.
+horizon_s: 259200
+universe: perp
+features: [close_1h]
+parameters:
+  - name: lookback_h
+    values: [72, 168, 720]
+  - name: horizon_h
+    values: [72, 168]
+  - name: n_short
+    values: [0]
+cost_round_trip_frac: 0.0022
+min_edge_frac: 0.10
+edge_basis: per_year
+abandon: >-
+  Mêmes critères que tm_momentum ; l'écart de Sharpe avec le buy & hold BTC est ici le
+  critère décisif.
