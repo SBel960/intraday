@@ -45,7 +45,7 @@ intraday/
 │   ├── SPEC_INTRADAY.md           spécification d'origine (référence)
 │   ├── SPEC_LONG_TERME.md         addendum long terme
 │   ├── ARBORESCENCE.md            ce fichier + statut de validation par fichier
-│   └── SPEC_EVENEMENTS.md         (à écrire en début de phase 9) règles des informations hors marché
+│   └── SPEC_EVENEMENTS.md         règles des informations hors marché (phase 9) : sources, réception, risque, signaux
 ├── config/
 │   ├── base.yaml                  racine des données, budget disque, sources, univers tradé (trade) et observé (observe), limites de risque, paliers de capital
 │   ├── intraday.yaml              horizons du gate, latences, fenêtres de features, seuils (fraîcheur, ratio 3)
@@ -256,10 +256,12 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 
 | # | Phase | Fichier | Statut |
 |---|---|---|---|
-| 48 | 9 · Événements | `docs/SPEC_EVENEMENTS.md` (spécification, à valider avant le code) | à faire |
+| 48 | 9 · Événements | `docs/SPEC_EVENEMENTS.md` (spécification, à valider avant le code) | livré, en attente de « validé » |
 | 49 | 9 · Événements | `events/calendar.py` | à faire |
 | 50 | 9 · Événements | `events/news.py` | à faire |
 | 51 | 9 · Événements | `events/classify.py` | à faire |
+| 51 bis | 9 · Événements | `timing/event_book.py` + fiches `hypotheses/timing/ev_*.yaml` (signaux d'événements, N du volet timing) | à faire |
+| 51 ter | 9 · Événements | événements et drapeaux actifs dans le cockpit | à faire |
 
 **Phase 10 — Timing (meilleur moment d'achat et de vente), décidée le 2026-10-14.** Long et short (perpétuels USDⓈ-M à 1×), horizon libre de 5 min à 72 h, recherche et paper uniquement ; spécification : `docs/SPEC_TIMING.md`.
 
