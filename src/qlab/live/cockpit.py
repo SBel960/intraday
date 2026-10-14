@@ -7,7 +7,7 @@ puis ouvrir l'adresse affichée dans le navigateur (Windows : WSL2 relaie ``loca
   publics de l'échange (sans clé) ; ce module ne sort pas sur le réseau.
 - **État de qlab** (``/api/state``, recalculé au plus toutes les ``CACHE_MS``) : signal de
   l'essai suivi à la dernière clôture locale, fraîcheur des données, spreads médians relevés,
-  minuteurs ``qlab-*``, essais, limites de risque, disque, volet timing (``timing_state``) ;
+  minuteurs ``qlab-*``, essais, limites, disque, recherche et annonces (``research_state``) ;
 - **paper trading** (``paper_state``) : portefeuille rebâti depuis le journal
   (``paper_book.replay``), valeurs de clôture, derniers passages, prochain rééquilibrage. La page
   le valorise aux prix en direct ; sans journal, elle garde un portefeuille **fictif** (capital
@@ -43,7 +43,7 @@ from qlab.exchange.snapshots import SnapshotStore
 from qlab.exchange.spreads import medians as spread_medians
 from qlab.live import paper_book, paper_report
 from qlab.live.paper import book_name
-from qlab.live.timing_state import timing_state
+from qlab.live.research_state import research_state
 from qlab.longterm import signals as sg
 from qlab.longterm import strategies
 from qlab.longterm.allocation import Policy, is_calendar_day
@@ -205,7 +205,7 @@ def collect(
             strategies.policy_for(hypothesis),
             config.longterm.acceptance.paper_min_days,
         ),
-        "timing": timing_state(paths),
+        **research_state(paths),
         "timers": _systemd_timers(),
         "disk": {"used": disk.used, "total": disk.total},
     }

@@ -246,10 +246,30 @@ td.orders { text-align: left; white-space: normal; line-height: 1.5; padding-lef
 </section>
 
 <section class="journal-row">
+  <article class="card" id="events-card">
+    <div class="card-head"><h2>Paper des annonces Binance</h2><span class="legend" id="events-meta">—</span></div>
+    <p class="mute">Retrait d'un jeton ⇒ vente à découvert de son contrat 72 h ; cotation ⇒ achat 24 h. Aucun ordre réel ; prix relus des bougies publiques.</p>
+    <div class="scroll"><table><thead><tr><th>Reçue</th><th>Annonce</th><th>Contrat</th><th>Sens</th><th>État</th></tr></thead><tbody id="events-trades"></tbody></table></div>
+    <h3 class="mute">Dernières annonces suivies</h3>
+    <div class="scroll"><table><thead><tr><th>Publiée</th><th>Titre</th><th>Source</th></tr></thead><tbody id="events-recent"></tbody></table></div>
+  </article>
+</section>
+
+<section class="journal-row">
   <article class="card" id="timing-card" hidden>
-    <div class="card-head"><h2>Recherche timing (contrats, long et short)</h2><span class="legend" id="timing-meta">—</span></div>
+    <div class="card-head"><h2>Recherche crypto (contrats perpétuels, long et short)</h2><span class="legend" id="timing-meta">—</span></div>
     <p class="mute" id="timing-verdict"></p>
     <div class="scroll"><table><thead><tr><th>#</th><th>Essai</th><th>Paramètres</th><th>Sharpe an.</th><th>Net/an</th><th>Frais/an</th><th>Financement/an</th><th>Investi</th></tr></thead><tbody id="timing"></tbody></table></div>
+  </article>
+  <article class="card" id="multi-card" hidden>
+    <div class="card-head"><h2>Recherche multi-actifs (45 marchés, quotidien)</h2><span class="legend" id="multi-meta">—</span></div>
+    <p class="mute" id="multi-verdict"></p>
+    <div class="scroll"><table><thead><tr><th>#</th><th>Essai</th><th>Paramètres</th><th>Sharpe an.</th><th>Net/an</th><th>Frais/an</th><th>Financement/an</th><th>Investi</th></tr></thead><tbody id="multi"></tbody></table></div>
+  </article>
+  <article class="card" id="trading-card" hidden>
+    <div class="card-head"><h2>Recherche trading horaire (devises, indices, or)</h2><span class="legend" id="trading-meta">—</span></div>
+    <p class="mute" id="trading-verdict"></p>
+    <div class="scroll"><table><thead><tr><th>#</th><th>Essai</th><th>Paramètres</th><th>Sharpe an.</th><th>Net/an</th><th>Frais/an</th><th>Financement/an</th><th>Investi</th></tr></thead><tbody id="trading"></tbody></table></div>
   </article>
 </section>
 
@@ -291,7 +311,7 @@ async function loadState() {
     S.state = d; S.stateAt = Date.now();
     $("banner").hidden = true;
     if (first) boot();
-    renderSystem(); renderPortfolio(); renderRisk(); renderMomentum(); renderJournal(); renderTiming();
+    renderSystem(); renderPortfolio(); renderRisk(); renderMomentum(); renderJournal(); renderResearch(); renderEvents();
   } catch (e) {
     $("banner").hidden = false;
     $("banner").textContent = "État qlab indisponible : " + e.message + ". Le serveur local tourne-t-il ? (python -m qlab.live.cockpit)";
@@ -594,20 +614,40 @@ function drawEquity(values, start) {
   g.beginPath(); a.forEach((v, i) => i ? g.lineTo(x(i), y(v)) : g.moveTo(x(i), y(v))); g.lineWidth = 3; g.strokeStyle = col; g.stroke();
 }
 
-/* ---------- Recherche timing ---------- */
-function renderTiming() {
-  const t = S.state && S.state.timing;
-  $("timing-card").hidden = !t; if (!t) return;
-  $("timing-meta").textContent = `balayage du ${t.date} · ${t.n_trials} essais comptés · avant hold-out`;
+/* ---------- Recherche (volets timing, multi, trading) ---------- */
+const UNITS = { timing: "h", multi: "j", trading: "h" };
+function renderResearch() { ["timing", "multi", "trading"].forEach(renderVolet); }
+function renderVolet(volet) {
+  const t = S.state && S.state[volet];
+  $(`${volet}-card`).hidden = !t; if (!t) return;
+  const short = (id) => id.split("_").slice(1).join("_");
+  $(`${volet}-meta`).textContent = `balayage du ${t.date} · ${t.n_trials} essais comptés · avant hold-out`;
   const sign = (v) => v > 0 ? "up" : v < 0 ? "down" : "";
-  $("timing").innerHTML = t.rows.map((r, i) => `<tr><td>${i + 1}</td><td>${r.id.replace("tm_", "")}</td>
-      <td>${Object.entries(r.params).map(([k, v]) => `${k.replace("_h", "")} ${v} h`).join(" · ")}</td>
+  const params = (p) => Object.entries(p).filter(([k]) => /^(lookback|horizon)_/.test(k) || k.endsWith("_z"))
+    .map(([k, v]) => `${k.replace(/_(h|d)$/, "")} ${v}${/_(h|d)$/.test(k) ? " " + UNITS[volet] : ""}`).join(" · ");
+  $(volet).innerHTML = t.rows.map((r, i) => `<tr><td>${i + 1}</td><td>${short(r.id)}</td><td>${params(r.params)}</td>
       <td class="${sign(r.sharpe)}">${r.sharpe.toFixed(2).replace(".", ",")}</td><td class="${sign(r.net_per_year)}">${pct(r.net_per_year, 1)}</td>
       <td>${pct(-r.cost_per_year, 1)}</td><td>${pct(-r.funding_per_year, 1)}</td><td>${pct(r.invested, 0).replace("+", "")}</td></tr>`).join("");
   const v = t.verdicts || [], h = t.holdout;
-  const best = v.map((x) => `${x.id.replace("tm_", "")} (${Object.values(x.params).join("/")}) : ${x.verdict}, DSR ${(+x.dsr).toFixed(2)}`).join(" · ");
-  $("timing-verdict").textContent = (best ? "Verdicts : " + best : "Verdicts : pas encore calculés.")
-    + (h ? ` · Hold-out (${h.name}) : Sharpe ${(+h.strategy.sharpe).toFixed(2)} contre ${(+h.buy_hold.sharpe).toFixed(2)} pour le buy & hold.` : " · Hold-out : pas encore utilisé.");
+  const best = v.map((x) => `${short(x.id)} : ${x.verdict}, DSR ${(+x.dsr).toFixed(2)}`).join(" · ");
+  const ref = h && (h.benchmark || h.buy_hold);
+  $(`${volet}-verdict`).textContent = (best ? "Verdicts : " + best : "Verdicts : pas encore calculés.")
+    + (h ? ` · Hold-out (${h.name}) : Sharpe ${(+h.strategy.sharpe).toFixed(2)} contre ${(+ref.sharpe).toFixed(2)} pour la référence.` : " · Hold-out : pas encore utilisé.");
+}
+
+/* ---------- Paper des annonces ---------- */
+function renderEvents() {
+  const e = S.state && S.state.events; if (!e) return;
+  const day = (ms) => new Date(ms).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+  $("events-meta").textContent = `${e.closed} trade(s) clos · résultat ${e.total_quote >= 0 ? "+" : ""}${e.total_quote.toFixed(2).replace(".", ",")} USDT`;
+  $("events-trades").innerHTML = e.trades.length ? e.trades.map((t) => {
+    const c = t.close;
+    const state = t.decision === "skipped" ? `écartée : ${t.reason}` : c
+      ? `<span class="${c.return_frac >= 0 ? "up" : "down"}">${pct(c.return_frac, 1)} (${c.net_quote.toFixed(2).replace(".", ",")} USDT)</span>${c.liquidated ? " · liquidée" : ""}`
+      : `en cours jusqu'au ${day(t.exit_ms)}`;
+    return `<tr><td>${day(t.received_ms)}</td><td>${t.kind === "delisting" ? "retrait" : "cotation"}</td><td>${t.symbol}</td><td>${t.side < 0 ? "vente" : "achat"}</td><td>${state}</td></tr>`;
+  }).join("") : `<tr><td colspan="5" class="mute">Aucune annonce reçue depuis la mise en service (14/10/2026).</td></tr>`;
+  $("events-recent").innerHTML = e.recent.map((r) => `<tr><td>${day(r.published_ms)}</td><td>${r.title}</td><td>${r.live ? "reçue en direct" : "historique"}</td></tr>`).join("");
 }
 
 /* ---------- Signal (momentum) ---------- */

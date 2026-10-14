@@ -110,7 +110,7 @@ Cela fait 8 essais, et N passe de 105 à 113, sous le budget de 120.
 | 50 | `events/news.py` + `ops/qlab-events.{service,timer}` | collecte des annonces Binance (temps réel + recharge de l'historique), RAW, contrôle d'horloge, `core/paths.py` : `events_*` |
 | 51 | `events/classify.py` | règles versionnées titre → `kind`, `bases` ; drapeaux et exclusions |
 | 51 bis | `timing/event_book.py` + fiches `hypotheses/timing/ev_*.yaml` + `timing/scan.py` | portefeuille piloté par événements, balayage |
-| 51 ter | `live/timing_state.py` / cockpit | événements récents et drapeaux actifs dans le cockpit |
+| 51 ter | `live/research_state.py` / cockpit | annonces récentes et paper des annonces dans le cockpit |
 
 ## 8. Hors champ
 
