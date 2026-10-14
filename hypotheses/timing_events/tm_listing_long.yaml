@@ -1,0 +1,31 @@
+id: tm_listing_long
+title: Achat du contrat perpétuel d'un jeton dont Binance annonce la cotation au spot
+volet: timing
+created: "2026-10-14"
+mechanism: >-
+  Phase 9 (docs/SPEC_EVENEMENTS.md). La cotation au spot de Binance ouvre le jeton à des
+  millions d'utilisateurs : demande nouvelle, visibilité. Quand le contrat perpétuel existe
+  déjà, il est acheté à l'ouverture qui suit l'annonce (publication + 5 min pour
+  l'historique) et tenu k heures. Seulement si le contrat est liquide à l'annonce.
+horizon_s: 86400
+universe: perp
+features: [binance_announcements, close_1h]
+parameters:
+  - name: lookback_h
+    values: [4, 24, 72]
+  - name: horizon_h
+    values: [1]
+  - name: signed
+    values: [1]
+  - name: persistent
+    values: [1]
+  - name: n_long
+    values: [3]
+  - name: n_short
+    values: [0]
+cost_round_trip_frac: 0.0022
+min_edge_frac: 0.10
+edge_basis: per_year
+abandon: >-
+  Mêmes critères que tm_delisting_short (dont : au moins 30 annonces exploitables avant le
+  hold-out).

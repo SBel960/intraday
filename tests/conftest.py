@@ -192,10 +192,19 @@ TRADING: dict[str, object] = {
     "max_trials": 20,
 }
 
+EVENTS: dict[str, object] = {
+    "list_url": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query",
+    "catalogs": [{"id": 48, "name": "listing"}, {"id": 161, "name": "delisting"}],
+    "page_size": 2,
+    "request_interval_s": 0.0,
+    "latency_margin_s": 300,
+    "exchange": "binance",
+}
+
 
 @pytest.fixture
 def config_dir(tmp_path: Path) -> Path:
-    """Écrit les six YAML valides ; la racine des données est ``tmp_path/data``."""
+    """Écrit les sept YAML valides ; la racine des données est ``tmp_path/data``."""
     cfg = tmp_path / "config"
     cfg.mkdir()
     base = {
@@ -210,6 +219,7 @@ def config_dir(tmp_path: Path) -> Path:
         ("timing", TIMING),
         ("markets", MARKETS),
         ("trading", TRADING),
+        ("events", EVENTS),
     ):
         (cfg / f"{name}.yaml").write_text(yaml.safe_dump(content), encoding="utf-8")
     return cfg

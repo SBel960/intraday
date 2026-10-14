@@ -61,6 +61,18 @@ class DataPaths:
         return self.meta / "timing_holdout.jsonl"
 
     @property
+    def events_news_dir(self) -> Path:
+        """Annonces reçues (RAW, ajout seulement) : ``events/news/``."""
+        return self.root / "events" / "news"
+
+    def events_news(self, day: str) -> Path:
+        """Annonces d'un jour (UTC, réception ou publication si rechargée) :
+        ``events/news/date=AAAA-MM-JJ/binance_cms.jsonl``."""
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", day):
+            raise ValueError(f"jour invalide pour un chemin : {day!r}")
+        return self.events_news_dir / f"date={day}" / "binance_cms.jsonl"
+
+    @property
     def trading_holdout(self) -> Path:
         """Registre du hold-out du volet trading : une seule entrée permise."""
         return self.meta / "trading_holdout.jsonl"

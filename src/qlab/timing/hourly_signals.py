@@ -18,6 +18,8 @@ avant les tests) ; fenêtre de k barres. Les expressions s'évaluent sur un pane
 | ``btc_catchup`` | momentum_k(référence) − momentum_k(contrat) (retard sur BTC) |
 | ``breakout`` | close_t / max(high des k h précédentes) − 1 |
 | ``low_volatility`` | − écart-type des rendements log horaires sur k h |
+| ``delisting_short`` | −1 pendant k barres après une annonce de retrait (``event_book.py``) |
+| ``listing_long`` | +1 pendant k barres après une annonce de cotation |
 | ``channel`` | position de close_t dans [min low, max high] des k h (canal de Donchian) − ½ |
 | ``seasonality`` | rendement moyen à l'horizon h, mêmes heures de la semaine, semaines passées |
 
@@ -84,6 +86,17 @@ def _funding_contrarian(k: int) -> pl.Expr:
     return -_per(pl.col("funding").rolling_sum(k))
 
 
+def _event(kind: str, side: float) -> Callable[[int], pl.Expr]:
+    """``side`` pendant les k barres qui suivent la barre de signal d'une annonce, 0 sinon
+    (colonne ``{kind}_age`` ajoutée par ``timing/event_book.py``)."""
+
+    def expr(k: int) -> pl.Expr:
+        age = pl.col(f"{kind}_age")
+        return pl.when((age >= 0) & (age < k)).then(side).otherwise(0.0)
+
+    return expr
+
+
 _BY_LOOKBACK: dict[str, Callable[[int], pl.Expr]] = {
     "momentum": _momentum,
     "reversal": lambda k: -_momentum(k),
@@ -95,6 +108,8 @@ _BY_LOOKBACK: dict[str, Callable[[int], pl.Expr]] = {
     "breakout": _breakout,
     "low_volatility": _low_volatility,
     "channel": _channel,
+    "delisting_short": _event("delisting", -1.0),
+    "listing_long": _event("listing", 1.0),
 }
 ALIASES = {
     "trend": "momentum",

@@ -32,6 +32,7 @@ LONGTERM_FILE = "longterm.yaml"
 TIMING_FILE = "timing.yaml"
 MARKETS_FILE = "markets.yaml"
 TRADING_FILE = "trading.yaml"
+EVENTS_FILE = "events.yaml"
 MINUTES_PER_DAY = 1440
 
 
@@ -809,6 +810,43 @@ class TradingConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class EventCatalog:
+    """Rubrique d'annonces de la source (``id``) et son nom dans les enregistrements."""
+
+    id: int
+    name: str
+
+    def __post_init__(self) -> None:
+        _positive("id", self.id)
+        _check(bool(re.match(r"^[a-z_]+$", self.name)), f"rubrique invalide : {self.name!r}")
+
+
+@dataclass(frozen=True, slots=True)
+class EventsConfig:
+    """Phase 9 (``docs/SPEC_EVENEMENTS.md``) : annonces Binance horodatées à la réception.
+
+    ``list_url`` : liste paginée d'une rubrique (point d'accès public non documenté) ;
+    ``catalogs`` : rubriques suivies ; ``page_size`` ; ``request_interval_s`` : pause entre deux
+    pages ; ``latency_margin_s`` : en backtest, délai ajouté à l'heure de publication d'une
+    annonce rechargée de l'historique (on n'a pas son heure de réception) ; ``exchange`` : place
+    dont l'horloge sert de référence (refus au-delà de son ``max_clock_offset_ms``)."""
+
+    list_url: str
+    catalogs: tuple[EventCatalog, ...]
+    page_size: int
+    request_interval_s: float
+    latency_margin_s: int
+    exchange: str
+
+    def __post_init__(self) -> None:
+        _url("list_url", self.list_url, "https")
+        _unique("catalogs.name", [c.name for c in self.catalogs])
+        _positive("page_size", self.page_size)
+        _non_negative("request_interval_s", self.request_interval_s)
+        _non_negative("latency_margin_s", self.latency_margin_s)
+
+
+@dataclass(frozen=True, slots=True)
 class QlabConfig:
     base: BaseConfig
     intraday: IntradayConfig
@@ -816,6 +854,7 @@ class QlabConfig:
     timing: TimingConfig
     markets: MarketsConfig
     trading: TradingConfig
+    events: EventsConfig
 
 
 def load_base(path: Path) -> BaseConfig:
@@ -842,8 +881,12 @@ def load_trading(path: Path) -> TradingConfig:
     return build(TradingConfig, read_yaml(path, error=ConfigError), "trading", error=ConfigError)
 
 
+def load_events(path: Path) -> EventsConfig:
+    return build(EventsConfig, read_yaml(path, error=ConfigError), "events", error=ConfigError)
+
+
 def load_config(config_dir: Path) -> QlabConfig:
-    """Charge et valide les six fichiers de ``config_dir``."""
+    """Charge et valide les sept fichiers de ``config_dir``."""
     return QlabConfig(
         base=load_base(config_dir / BASE_FILE),
         intraday=load_intraday(config_dir / INTRADAY_FILE),
@@ -851,6 +894,7 @@ def load_config(config_dir: Path) -> QlabConfig:
         timing=load_timing(config_dir / TIMING_FILE),
         markets=load_markets(config_dir / MARKETS_FILE),
         trading=load_trading(config_dir / TRADING_FILE),
+        events=load_events(config_dir / EVENTS_FILE),
     )
 
 

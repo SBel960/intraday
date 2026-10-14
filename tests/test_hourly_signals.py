@@ -129,7 +129,10 @@ def test_causal_future_change_does_not_move_signal(name: str) -> None:
     des rendements passés d'au moins une semaine : vérifiée sur la même règle)."""
     n = sg.BASELINE_H + 30
     closes = [100.0 + (i % 7) for i in range(n)]
-    base = _panel(closes, funding=[0.0001 * (i % 3) for i in range(n)])
+    base = _panel(closes, funding=[0.0001 * (i % 3) for i in range(n)]).with_columns(
+        pl.lit(None, pl.Int64).alias("delisting_age"),  # causalité des annonces : test_event_book
+        pl.lit(None, pl.Int64).alias("listing_age"),
+    )
     cut = n - 5
     changed = base.with_columns(
         pl.when(pl.col("t_ms") > T0 + cut * H)

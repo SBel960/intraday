@@ -1,0 +1,12 @@
+# Phase 9 (docs/SPEC_EVENEMENTS.md) : annonces Binance, horodatées à la RÉCEPTION.
+# Point d'accès public non documenté (accepté le 2026-10-14) : une réponse de forme inattendue
+# arrête la collecte. Suffixes : _s secondes.
+
+list_url: https://www.binance.com/bapi/composite/v1/public/cms/article/list/query
+catalogs:
+  - {id: 48, name: listing}          # « New Cryptocurrency Listing »
+  - {id: 161, name: delisting}       # « Delisting »
+page_size: 50
+request_interval_s: 1.0
+latency_margin_s: 300                # backtest : publication + 5 min, puis heure pleine suivante
+exchange: binance                    # horloge de référence (max_clock_offset_ms de base.yaml)

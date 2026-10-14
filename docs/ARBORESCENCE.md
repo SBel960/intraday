@@ -52,6 +52,7 @@ intraday/
 │   ├── base.yaml                  racine des données, budget disque, sources, univers tradé (trade) et observé (observe), limites de risque, paliers de capital
 │   ├── intraday.yaml              horizons du gate, latences, fenêtres de features, seuils (fraîcheur, ratio 3)
 │   ├── longterm.yaml              lookbacks, bandes de rééquilibrage, DCA (montant, période), vol cible
+│   ├── events.yaml                phase 9 : rubriques d'annonces Binance suivies, pagination, marge de latence du backtest, horloge de référence
 │   ├── trading.yaml               volet trading : source, 21 instruments (classe, spread supposé), commission et glissement par classe, heures exclues, poids, hold-out, budget
 │   ├── markets.yaml               volet multi-actifs : source, 45 marchés et leurs classes (coût d'une jambe), liquidité, pointes, poids, hold-out, budget
 │   └── timing.yaml                volet timing : API et frais des contrats, horizons, univers liquide, lignes long / short, hold-out, budget d'essais
@@ -60,7 +61,8 @@ intraday/
 │   ├── lt_*.yaml                  fiches de la vague 1, écrites AVANT tout test (voir « Hypothèses par vagues »)
 │   ├── timing/tm_*.yaml           fiches du volet timing (perpétuels)
 │   ├── multi/mk_*.yaml            fiches du volet multi-actifs
-│   └── trading/tr_*.yaml          fiches du volet trading
+│   ├── trading/tr_*.yaml          fiches du volet trading
+│   └── timing_events/             fiches d'événements figées, en attente de puissance (non balayées ; voir LISEZMOI.md)
 ├── src/qlab/
 │   ├── core/
 │   │   ├── config.py              chargement YAML → dataclasses figées et validées ; erreur si une clé manque
@@ -138,12 +140,13 @@ intraday/
 │   │   └── paper_report.py        paper face au backtest (LT.6) : rendement sur N jours dans l'IC bootstrap des chemins de N jours du backtest ; fidélité des prix aux archives ; exploitation
 │   ├── events/                    phase 9 : informations hors marché (annonces, calendrier, actualité)
 │   │   ├── calendar.py            événements programmés (Fed, inflation US…) : fenêtres sans nouvelle position
-│   │   ├── news.py                collecte d'annonces (Binance, GDELT…), horodatées à la RÉCEPTION, RAW append-only
-│   │   └── classify.py            classement des annonces → drapeaux de risque ; modèle et prompt versionnés
+│   │   ├── news.py                annonces Binance (cotations, retraits) : historique et relevé, horodatées à la RÉCEPTION (horloge contrôlée), RAW append-only dédoublonné
+│   │   └── classify.py            classement par règles versionnées sur le titre (retrait, retrait de paires, cotation, contrats) → table des événements à l'heure effective
 │   ├── timing/                    phase 10 : meilleur moment d'achat / vente (long et short à 1×) ; moteur commun aux barres horaires (perpétuels) et quotidiennes (multi-actifs)
 │   │   ├── panel.py               panel horaire de tous les contrats : grille complète (trous marqués), barre, financement par heure, univers liquide point-in-time, fenêtres à venir en barres (contrat retiré soldé au dernier prix)
 │   │   ├── hourly_signals.py      signaux horaires orientés et causaux (momentum, retour, flux acheteur, choc de volume, financement, rattrapage de BTC, cassure, canal de Donchian, faible volatilité, saisonnalité) ; alias des fiches qui changent seulement le portefeuille
 │   │   ├── portfolio.py           n_long meilleurs / n_short pires toutes les h barres (ou signé : selon le signe du signal), poids égaux ou inverses de la volatilité, levier 1× ; rendements nets (frais, ½ spread, glissement, financement) ; buy & hold et panier de référence
+│   │   ├── event_book.py          âge des annonces (retrait, cotation) par contrat perpétuel, barre de signal après l'heure effective, contrat liquide à l'annonce
 │   │   ├── bands.py               bandes d'entrée et de sortie : signal mis à l'échelle de sa variabilité passée, hystérésis, état changé seulement sur une barre tradable
 │   │   ├── study.py               étude d'un volet (données, coûts, portefeuille, référence, hold-out) ; essais comptés, classement avant hold-out, rapport + JSON
 │   │   ├── scan.py                étude des perpétuels (univers point-in-time, spreads mesurés, référence BTC) et commande de balayage des fiches hypotheses/timing
@@ -275,11 +278,11 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 
 | # | Phase | Fichier | Statut |
 |---|---|---|---|
-| 48 | 9 · Événements | `docs/SPEC_EVENEMENTS.md` (spécification, à valider avant le code) | livré, en attente de « validé » |
+| 48 | 9 · Événements | `docs/SPEC_EVENEMENTS.md` (spécification, à valider avant le code) | validé (2026-10-14, réponses recommandées du §9 acceptées) |
 | 49 | 9 · Événements | `events/calendar.py` | à faire |
-| 50 | 9 · Événements | `events/news.py` | à faire |
-| 51 | 9 · Événements | `events/classify.py` | à faire |
-| 51 bis | 9 · Événements | `timing/event_book.py` + fiches `hypotheses/timing/ev_*.yaml` (signaux d'événements, N du volet timing) | à faire |
+| 50 | 9 · Événements | `events/news.py` (+ `config/events.yaml`, `EventsConfig`, `core/paths.py` : `events_news`) ; historique rechargé : 2 283 cotations, 441 retraits | livré |
+| 51 | 9 · Événements | `events/classify.py` (règles v1 sur le titre ; pas de modèle de langage) | livré |
+| 51 bis | 9 · Événements | `timing/event_book.py` + signaux `delisting_short` / `listing_long` + fiches `hypotheses/timing_events/` : **non lancées**, puissance insuffisante (24 retraits exploitables avant le hold-out au mieux, 30 exigés) | livré (fiches en attente) |
 | 51 ter | 9 · Événements | événements et drapeaux actifs dans le cockpit | à faire |
 
 **Phase 10 — Timing (meilleur moment d'achat et de vente), décidée le 2026-10-14.** Long et short (perpétuels USDⓈ-M à 1×), horizon libre de 5 min à 72 h, recherche et paper uniquement ; spécification : `docs/SPEC_TIMING.md`.

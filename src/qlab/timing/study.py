@@ -5,7 +5,8 @@ Commun aux perpétuels Binance (``timing/scan.py``, barres horaires), aux march�
 
 Une fiche ``<préfixe>_<signal>`` essaie le signal ``<signal>`` (``timing/hourly_signals.py``)
 avec ses paramètres ``lookback_<u>`` et ``horizon_<u>`` (``u`` : unité de la barre, ``h`` ou
-``d``) ; ``n_long``, ``n_short`` et ``signed`` (0 / 1) de la fiche remplacent ceux de l'étude.
+``d``) ; ``n_long``, ``n_short``, ``signed`` et ``persistent`` (0 / 1) de la fiche remplacent
+ceux de l'étude.
 Une fiche à **bandes** déclare ``enter_z`` et ``exit_z`` : le signal devient une position
 tenue (``timing/bands.py``, échelle sur ``vol_lookback`` barres) et le portefeuille est
 signé, persistant, en budget de risque. Chaque essai est compté dans le registre (N du DSR du
@@ -99,6 +100,7 @@ class Study:
             signed=bool(params.get("signed", 0)),
             weighting=self.weighting,
             vol_lookback=self.vol_lookback,
+            persistent=bool(params.get("persistent", 0)),
         )
 
     def periods_per_year(self, horizon: int) -> int:
