@@ -1,0 +1,23 @@
+id: tr_seasonality
+title: Heures de la semaine (ouvertures de Londres et de New York, fixing de 16 h)
+volet: trading
+created: "2026-10-14"
+mechanism: >-
+  Les flux institutionnels se concentrent à heures fixes : ouverture de Londres (7-8 h UTC),
+  de New York (13-14 h UTC), fixing WM/Reuters de 16 h à Londres, couvertures de fin de
+  semaine. Le rendement moyen passé d'un instrument à la même heure de la semaine prédit
+  celui de cette heure.
+horizon_s: 3600
+universe: fx_cfd
+features: [close_1h]
+parameters:
+  - name: horizon_h
+    values: [1, 4]
+cost_round_trip_frac: 0.0003
+min_edge_frac: 0.03
+edge_basis: per_year
+abandon: >-
+  Abandon si DSR < 0,95 sur les essais du volet trading, si l'écart de Sharpe avec le panier
+  de tous les instruments n'a pas un IC bootstrap à 95 % strictement positif, ou si le
+  résultat ne tient pas sur 3 années et sur les deux moitiés des instruments. Hold-out (depuis
+  2024-10-01) lu une seule fois, pour le meilleur candidat.

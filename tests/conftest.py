@@ -167,10 +167,35 @@ MARKETS: dict[str, object] = {
     "max_trials": 20,
 }
 
+TRADING: dict[str, object] = {
+    "page_url": "https://www.histdata.com/download-free-forex-historical-data/?/ascii/1-minute-bar-quotes/",
+    "download_url": "https://www.histdata.com/get.php",
+    "request_interval_s": 0.0,
+    "start_year": 2019,
+    "source_utc_offset_h": 5,
+    "classes": [
+        {"name": "devises", "commission_frac": 0.00002, "slippage_frac": 0.00002},
+        {"name": "indices", "commission_frac": 0.00002, "slippage_frac": 0.00003},
+    ],
+    "instruments": [
+        {"name": "EURUSD", "asset_class": "devises", "spread_frac": 0.00005, "label": "Euro"},
+        {"name": "USDJPY", "asset_class": "devises", "spread_frac": 0.00006, "label": "Yen"},
+        {"name": "SPXUSD", "asset_class": "indices", "spread_frac": 0.0001, "label": "S&P"},
+    ],
+    "excluded_hours_utc": [21, 22],
+    "days_per_year": 360,
+    "warmup_bars": 24,
+    "vol_lookback_bars": 24,
+    "n_long": 1,
+    "n_short": 1,
+    "holdout_start": "2020-03-01",
+    "max_trials": 20,
+}
+
 
 @pytest.fixture
 def config_dir(tmp_path: Path) -> Path:
-    """Écrit les cinq YAML valides ; la racine des données est ``tmp_path/data``."""
+    """Écrit les six YAML valides ; la racine des données est ``tmp_path/data``."""
     cfg = tmp_path / "config"
     cfg.mkdir()
     base = {
@@ -184,6 +209,7 @@ def config_dir(tmp_path: Path) -> Path:
         ("longterm", LONGTERM),
         ("timing", TIMING),
         ("markets", MARKETS),
+        ("trading", TRADING),
     ):
         (cfg / f"{name}.yaml").write_text(yaml.safe_dump(content), encoding="utf-8")
     return cfg

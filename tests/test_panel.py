@@ -146,3 +146,18 @@ def test_load_from_disk_filters_quote_and_bases(tmp_path: Path) -> None:
     assert p["funding"].to_list() == pytest.approx([0.001, 0.0])
     with pytest.raises(DataError, match="aucun contrat"):
         pn.load(paths, UNI, symbols=[])
+
+
+def test_carry_closed_keeps_the_last_price_without_entry() -> None:
+    p = pl.DataFrame(
+        {
+            "symbol": ["A"] * 3,
+            "open": [1.0, None, 3.0],
+            "high": [1.5, None, 3.5],
+            "low": [0.5, None, 2.5],
+            "close": [1.2, None, 3.1],
+        }
+    )
+    got = pn.carry_closed(p)
+    assert got.row(1) == ("A", None, 1.2, 1.2, 1.2, False)
+    assert got["traded"].to_list() == [True, False, True]

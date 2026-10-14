@@ -20,7 +20,9 @@ le reçoit), **plafonné à la perte de la mise** ``−|w|`` : à 1×, chaque li
 isolée ; une vente à découvert est liquidée si le plus haut de la détention double le prix
 d'entrée (``panel.forward_peak``), quelle que soit la sortie. Coût : ``|w_T − w_{T−h}| · c``
 par actif, ``c`` = coût d'une jambe (``costs/cost_model.one_way_taker`` : frais + ½ spread +
-glissement). La dérive des poids pendant la période est ignorée (approximation usuelle).
+glissement). Si le panel porte un spread mesuré à chaque barre (colonne ``spread_frac``), ``c``
+= frais et glissement de ``Book.costs`` + ½ spread **de la barre du trade** (médiane de l'actif
+si la barre n'en a pas). La dérive des poids pendant la période est ignorée.
 """
 
 from __future__ import annotations
@@ -35,6 +37,8 @@ import polars as pl
 from qlab.core.errors import DataError
 from qlab.costs.cost_model import one_way_taker
 from qlab.timing.panel import forward_funding, forward_peak, forward_return
+
+SPREAD = "spread_frac"  # colonne facultative du panel : spread relatif mesuré à chaque barre
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,6 +154,11 @@ def period_returns(panel: pl.DataFrame, signal: pl.Series, book: Book) -> pl.Dat
         prev, on=["bar", "symbol"], how="full", coalesce=True
     )
     cost_of = pl.col("symbol").replace_strict(book.costs, default=book.default_cost)
+    if SPREAD in panel.columns:  # spread mesuré à chaque barre : ½ spread de la barre du trade
+        spreads = panel.select("bar", "symbol", pl.col(SPREAD).alias("_spread"))
+        trades = trades.join(spreads, on=["bar", "symbol"], how="left")
+        typical = pl.col("_spread").median().over("symbol")
+        cost_of = cost_of + pl.coalesce(pl.col("_spread"), typical, pl.lit(0.0)) / 2
     trades = trades.with_columns(
         (pl.col("w").fill_null(0.0) - pl.col("w0").fill_null(0.0)).abs().alias("dw")
     ).with_columns((pl.col("dw") * cost_of).alias("c"))

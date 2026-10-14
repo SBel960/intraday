@@ -22,7 +22,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -42,7 +42,7 @@ from qlab.research.trials import TrialRegistry
 from qlab.timing import panel as pn
 from qlab.timing import scan
 from qlab.timing.portfolio import period_returns
-from qlab.timing.study import Study, returns_on
+from qlab.timing.study import Study, check_budget, returns_on, run_scan
 
 
 def halves(panel: pl.DataFrame) -> dict[str, pl.DataFrame]:
@@ -183,6 +183,34 @@ def holdout(ctx: Context, study: Study, fiches: list[Hypothesis], ident: str, sp
     append_record(study.holdout_path, record)
     print(json.dumps(record, indent=2, ensure_ascii=False))
     return 0
+
+
+def add_study_arguments(parser: argparse.ArgumentParser, fiches: Path, example: str) -> None:
+    """Sous-commandes communes d'un volet : ``scan``, ``best``, ``holdout`` (``example`` :
+    paramètres d'un essai, pour l'aide)."""
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    scan_cmd = sub.add_parser("scan", help="essayer toutes les combinaisons déclarées")
+    scan_cmd.add_argument("--only", help="fiches à essayer, séparées par des virgules")
+    best_cmd = sub.add_parser("best", help="verdict complet des meilleurs essais du balayage")
+    best_cmd.add_argument("--top", type=int, default=5)
+    hold = sub.add_parser("holdout", help="rejouer UN essai sur le hold-out (une seule fois)")
+    hold.add_argument("--id", required=True)
+    hold.add_argument("--params", required=True, help=f"ex. {example}")
+    parser.add_argument("--fiches", type=Path, default=fiches, help="dossier des fiches")
+
+
+def study_action(ctx: Context, prepare: Callable[[Context], Study], max_trials: int) -> int:
+    """Exécute la sous-commande : budget vérifié avant tout calcul, puis balayage, verdicts ou
+    hold-out de l'étude ``prepare(ctx)``."""
+    fiches = load_all(ctx.args.fiches)
+    check_budget(fiches, max_trials)
+    study = prepare(ctx)
+    if ctx.args.cmd == "scan":
+        chosen = ctx.args.only.split(",") if ctx.args.only else [h.id for h in fiches]
+        return run_scan(ctx, study, [h for h in fiches if h.id in chosen])
+    if ctx.args.cmd == "best":
+        return best(ctx, study, fiches, ctx.args.top)
+    return holdout(ctx, study, fiches, ctx.args.id, ctx.args.params)
 
 
 def _add_arguments(parser: argparse.ArgumentParser) -> None:

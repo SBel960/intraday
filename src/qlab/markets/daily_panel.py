@@ -30,6 +30,7 @@ from qlab.core.config import MarketsConfig
 from qlab.core.errors import DataError
 from qlab.core.paths import DataPaths
 from qlab.core.timeutils import MS_PER_DAY
+from qlab.timing.panel import carry_closed
 
 DAYS_PER_WEEK = 7
 WEEKDAYS = 5
@@ -88,11 +89,7 @@ def eligibility(panel: pl.DataFrame, cfg: MarketsConfig) -> pl.Expr:
 def assemble(bars: pl.DataFrame, cfg: MarketsConfig) -> pl.DataFrame:
     """Séances (``symbol``, ``t_ms``, prix, ``volume``) → panel complet du volet."""
     dollars = bars.with_columns((pl.col("close") * pl.col("volume")).alias("volume_quote"))
-    panel = remove_spikes(complete_grid(dollars.drop("volume")), cfg.spike_log_return)
-    panel = panel.with_columns(
-        pl.col("close").is_not_null().alias("traded"),
-        pl.col("close").forward_fill().over("symbol"),
-    ).with_columns(pl.col("high", "low").fill_null(pl.col("close")))
+    panel = carry_closed(remove_spikes(complete_grid(dollars.drop("volume")), cfg.spike_log_return))
     return panel.with_columns(
         pl.lit(0.0).alias("funding"), eligibility(panel, cfg).alias("eligible")
     ).select("symbol", "t_ms", "bar", *PRICES, "volume_quote", "traded", "funding", "eligible")

@@ -390,3 +390,19 @@ def test_repo_markets_config_is_valid() -> None:
     cfg = load_config(REPO_CONFIG).markets
     assert len(cfg.assets) == 45
     assert {a.asset_class for a in cfg.assets} == {c.name for c in cfg.classes}
+
+
+def test_trading_config_costs_and_checks(config_dir: Path) -> None:
+    cfg = load_config(config_dir).trading
+    assert cfg.leg_cost("EURUSD") == pytest.approx(0.00004)
+    with pytest.raises(ConfigError, match="inconnu"):
+        cfg.leg_cost("ZZZ")
+    _edit(config_dir / "trading.yaml", ["instruments", 0, "name"], "eur/usd")
+    with pytest.raises(ConfigError, match="instrument invalide"):
+        load_config(config_dir)
+
+
+def test_repo_trading_config_is_valid() -> None:
+    cfg = load_config(REPO_CONFIG).trading
+    assert len(cfg.instruments) == 21
+    assert {i.asset_class for i in cfg.instruments} == {c.name for c in cfg.classes}

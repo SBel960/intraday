@@ -22,11 +22,10 @@ from pathlib import Path
 from qlab.core.cli import Context, run_command
 from qlab.core.timeutils import date_to_ms
 from qlab.markets import daily_panel as mp
-from qlab.research.hypothesis import load_all
 from qlab.timing import panel as pn
 from qlab.timing import verdict
 from qlab.timing.portfolio import basket
-from qlab.timing.study import Study, check_budget, run_scan
+from qlab.timing.study import Study
 
 FICHES = Path("hypotheses/multi")
 VOLET = "multi"
@@ -64,27 +63,11 @@ def prepare(ctx: Context) -> Study:
 
 
 def _add_arguments(parser: argparse.ArgumentParser) -> None:
-    sub = parser.add_subparsers(dest="cmd", required=True)
-    scan = sub.add_parser("scan", help="essayer toutes les combinaisons déclarées")
-    scan.add_argument("--only", help="fiches à essayer, ex. mk_trend,mk_channel")
-    best = sub.add_parser("best", help="verdict complet des meilleurs essais du balayage")
-    best.add_argument("--top", type=int, default=5)
-    hold = sub.add_parser("holdout", help="rejouer UN essai sur le hold-out (une seule fois)")
-    hold.add_argument("--id", required=True)
-    hold.add_argument("--params", required=True, help="ex. lookback_d=126,horizon_d=21")
-    parser.add_argument("--fiches", type=Path, default=FICHES, help="dossier des fiches")
+    verdict.add_study_arguments(parser, FICHES, "lookback_d=126,horizon_d=21")
 
 
 def _action(ctx: Context) -> int:
-    fiches = load_all(ctx.args.fiches)
-    check_budget(fiches, ctx.config.markets.max_trials)
-    study = prepare(ctx)
-    if ctx.args.cmd == "scan":
-        chosen = ctx.args.only.split(",") if ctx.args.only else [h.id for h in fiches]
-        return run_scan(ctx, study, [h for h in fiches if h.id in chosen])
-    if ctx.args.cmd == "best":
-        return verdict.best(ctx, study, fiches, ctx.args.top)
-    return verdict.holdout(ctx, study, fiches, ctx.args.id, ctx.args.params)
+    return verdict.study_action(ctx, prepare, ctx.config.markets.max_trials)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

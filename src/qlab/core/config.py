@@ -31,6 +31,7 @@ INTRADAY_FILE = "intraday.yaml"
 LONGTERM_FILE = "longterm.yaml"
 TIMING_FILE = "timing.yaml"
 MARKETS_FILE = "markets.yaml"
+TRADING_FILE = "trading.yaml"
 MINUTES_PER_DAY = 1440
 
 
@@ -713,12 +714,108 @@ class MarketsConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class TradingClass:
+    """Classe d'instruments du volet trading : commission et glissement d'une jambe."""
+
+    name: str
+    commission_frac: float
+    slippage_frac: float
+
+    def __post_init__(self) -> None:
+        _check(bool(self.name), "classe d'instruments : nom vide")
+        _fraction("commission_frac", self.commission_frac)
+        _fraction("slippage_frac", self.slippage_frac)
+
+
+@dataclass(frozen=True, slots=True)
+class Instrument:
+    """Instrument de la source (``name``, ex. ``EURUSD``, ``SPXUSD``), classe, spread complet
+    supposé (fraction du prix : la source ne donne pas le bid / ask), libellé."""
+
+    name: str
+    asset_class: str
+    spread_frac: float
+    label: str
+
+    def __post_init__(self) -> None:
+        _check(bool(re.match(r"^[A-Z0-9]+$", self.name)), f"instrument invalide : {self.name!r}")
+        _fraction("spread_frac", self.spread_frac)
+
+
+@dataclass(frozen=True, slots=True)
+class TradingConfig:
+    """Volet trading (``docs/SPEC_TRADING.md``) : devises, indices et matières premières en
+    barres horaires (construites depuis des barres d'une minute), positions de quelques heures.
+
+    ``page_url`` : page de téléchargement de la source (instrument et période ajoutés) ;
+    ``download_url`` : formulaire de téléchargement ; ``request_interval_s`` : pause entre deux
+    fichiers ; ``start_year`` : première année ; ``source_utc_offset_h`` : heures à ajouter à
+    l'heure de la source pour obtenir l'UTC (heure de New York sans heure d'été : 5) ;
+    ``excluded_hours_utc`` : heures non tradables (bascule quotidienne, spreads écartés) ;
+    ``days_per_year`` : jours civils (barres de toutes les heures) ; ``warmup_bars`` : heures
+    échangées avant d'être éligible ; ``vol_lookback_bars`` : fenêtre des poids inverses ;
+    ``n_long`` / ``n_short`` : lignes des signaux transversaux ; ``holdout_start`` ;
+    ``max_trials`` : budget d'essais du volet."""
+
+    page_url: str
+    download_url: str
+    request_interval_s: float
+    start_year: int
+    source_utc_offset_h: int
+    classes: tuple[TradingClass, ...]
+    instruments: tuple[Instrument, ...]
+    excluded_hours_utc: tuple[int, ...]
+    days_per_year: int
+    warmup_bars: int
+    vol_lookback_bars: int
+    n_long: int
+    n_short: int
+    holdout_start: str
+    max_trials: int
+
+    def __post_init__(self) -> None:
+        _url("page_url", self.page_url, "https")
+        _url("download_url", self.download_url, "https")
+        _non_negative("request_interval_s", self.request_interval_s)
+        _positive("start_year", self.start_year)
+        _check(
+            bool(re.match(r"^\d{4}-\d{2}-\d{2}$", self.holdout_start)),
+            f"holdout_start : date AAAA-MM-JJ attendue (reçu {self.holdout_start!r})",
+        )
+        _unique("classes.name", [c.name for c in self.classes])
+        _unique("instruments.name", [i.name for i in self.instruments])
+        known = {c.name for c in self.classes}
+        for i in self.instruments:
+            _check(i.asset_class in known, f"{i.name} : classe inconnue {i.asset_class!r}")
+        for h in self.excluded_hours_utc:
+            _check(0 <= h < 24, f"excluded_hours_utc : heure 0-23 attendue (reçu {h})")
+        _positive("days_per_year", self.days_per_year)
+        _non_negative("warmup_bars", self.warmup_bars)
+        _check(self.vol_lookback_bars >= 2, "vol_lookback_bars doit être ≥ 2")
+        _non_negative("n_long", self.n_long)
+        _non_negative("n_short", self.n_short)
+        _positive("max_trials", self.max_trials)
+
+    def instrument(self, name: str) -> Instrument:
+        for i in self.instruments:
+            if i.name == name:
+                return i
+        raise ConfigError(f"instrument inconnu : {name}")
+
+    def leg_cost(self, name: str) -> float:
+        """Commission + glissement d'une jambe de l'instrument (le ½ spread est à part)."""
+        cls = {c.name: c for c in self.classes}[self.instrument(name).asset_class]
+        return cls.commission_frac + cls.slippage_frac
+
+
+@dataclass(frozen=True, slots=True)
 class QlabConfig:
     base: BaseConfig
     intraday: IntradayConfig
     longterm: LongtermConfig
     timing: TimingConfig
     markets: MarketsConfig
+    trading: TradingConfig
 
 
 def load_base(path: Path) -> BaseConfig:
@@ -741,14 +838,19 @@ def load_markets(path: Path) -> MarketsConfig:
     return build(MarketsConfig, read_yaml(path, error=ConfigError), "markets", error=ConfigError)
 
 
+def load_trading(path: Path) -> TradingConfig:
+    return build(TradingConfig, read_yaml(path, error=ConfigError), "trading", error=ConfigError)
+
+
 def load_config(config_dir: Path) -> QlabConfig:
-    """Charge et valide les cinq fichiers de ``config_dir``."""
+    """Charge et valide les six fichiers de ``config_dir``."""
     return QlabConfig(
         base=load_base(config_dir / BASE_FILE),
         intraday=load_intraday(config_dir / INTRADAY_FILE),
         longterm=load_longterm(config_dir / LONGTERM_FILE),
         timing=load_timing(config_dir / TIMING_FILE),
         markets=load_markets(config_dir / MARKETS_FILE),
+        trading=load_trading(config_dir / TRADING_FILE),
     )
 
 

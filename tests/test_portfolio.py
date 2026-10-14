@@ -162,6 +162,24 @@ def test_leg_costs_and_book_checks() -> None:
         pf.Book(1, 1, 1, {}, 0.0, vol_lookback=1)
 
 
+def test_measured_spread_is_charged_per_bar() -> None:
+    """Spread mesuré : A 0,2 % à t0 puis 0,6 % à t1, B sans mesure à t1 (sa médiane 0,4 %).
+    Coût d'une jambe = frais (A 0,001, B 0,002) + ½ spread de la barre.
+    t0 : ouverture A et B (½ chacun) : ½ · (0,001 + 0,001) + ½ · (0,002 + 0,002) = 0,003.
+    t1 : retournement (rotation 1 sur chacun) : 1 · (0,001 + 0,003) + 1 · (0,002 + 0,002)."""
+    panel, signal = _panel()
+    spreads = {("A", 0): 0.002, ("A", 1): 0.006, ("B", 0): 0.004}
+    panel = panel.with_columns(
+        pl.struct("symbol", "t_ms")
+        .map_elements(
+            lambda r: spreads.get((r["symbol"], (r["t_ms"] - T0) // H)), return_dtype=pl.Float64
+        )
+        .alias("spread_frac")
+    )
+    out = pf.period_returns(panel, signal, pf.Book(1, 1, 1, COSTS, 0.0))
+    assert out["cost"].to_list()[:2] == pytest.approx([0.003, 0.008])
+
+
 def test_buy_and_hold() -> None:
     panel, _ = _panel()
     bench = pf.buy_and_hold(panel, "A", 1)

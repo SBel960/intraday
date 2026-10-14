@@ -176,3 +176,17 @@ def test_connection_cut_mid_transfer_is_retried() -> None:
     assert flaky.get().attempts == 3
     assert flaky.waits == [2, 4]
     assert "réseau indisponible" in flaky.messages[0]
+
+
+def test_post_sends_the_body_and_headers() -> None:
+    """``data`` ⇒ requête POST avec ce corps (formulaire de téléchargement)."""
+    seen: list[Any] = []
+
+    def opener(target: Any, timeout: int) -> _Resp:
+        seen.append(target)
+        return _Resp(b"zip")
+
+    got = http.get(URL, data=b"a=1", headers={"Referer": "https://x"}, opener=opener)
+    assert got.body == b"zip"
+    assert seen[0].get_method() == "POST" and seen[0].data == b"a=1"
+    assert seen[0].get_header("Referer") == "https://x"

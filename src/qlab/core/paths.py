@@ -61,6 +61,16 @@ class DataPaths:
         return self.meta / "timing_holdout.jsonl"
 
     @property
+    def trading_holdout(self) -> Path:
+        """Registre du hold-out du volet trading : une seule entrée permise."""
+        return self.meta / "trading_holdout.jsonl"
+
+    def trading_hourly(self, instrument: str) -> Path:
+        """Barres horaires (prix moyens bid / ask, spread) d'un instrument du volet trading :
+        ``trading/hourly/{instrument}.parquet``."""
+        return self.root / "trading" / "hourly" / _symbol_file(instrument)
+
+    @property
     def markets_holdout(self) -> Path:
         """Registre du hold-out du volet multi-actifs : une seule entrée permise."""
         return self.meta / "markets_holdout.jsonl"

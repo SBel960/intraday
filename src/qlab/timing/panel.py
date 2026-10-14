@@ -75,6 +75,18 @@ def complete_grid(bars: pl.DataFrame) -> pl.DataFrame:
     return grid.join(bars, on=["symbol", "t_ms"], how="left").sort("symbol", "t_ms")
 
 
+def carry_closed(panel: pl.DataFrame) -> pl.DataFrame:
+    """Barres sans échange (marché fermé, férié, erreur retirée) : ``traded`` faux, ouverture
+    nulle (aucune entrée ni sortie à cette barre), **clôture reportée** de la barre précédente,
+    plus haut et plus bas égaux à cette clôture : le dernier prix reste le prix connu. Sans ce
+    report, chaque fermeture vide les fenêtres des signaux, des canaux et de la volatilité.
+    Pour les marchés qui ferment (multi-actifs, trading), pas pour les perpétuels (24 h/24)."""
+    return panel.with_columns(
+        pl.col("close").is_not_null().alias("traded"),
+        pl.col("close").forward_fill().over("symbol"),
+    ).with_columns(pl.col("high", "low").fill_null(pl.col("close")))
+
+
 def hourly_funding(funding: pl.DataFrame) -> pl.DataFrame:
     """Règlements (``symbol``, ``funding_time_ms``, ``rate``) → somme par heure."""
     return (

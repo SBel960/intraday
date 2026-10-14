@@ -92,19 +92,23 @@ def get(
     url: str,
     *,
     headers: Mapping[str, str] | None = None,
+    data: bytes | None = None,
     opener: Opener | None = None,
     sleep: Callable[[float], None] = time.sleep,
     clock_ms: Callable[[], int] | None = None,
     notify: Callable[[str], None] = _stderr,
 ) -> HttpResult:
-    """GET ``url`` en attendant le réseau aussi longtemps qu'il le faut (voir le module).
+    """GET ``url`` (POST si ``data`` : corps de formulaire déjà encodé) en attendant le réseau
+    aussi longtemps qu'il le faut (voir le module).
 
     ``headers`` : en-têtes de la requête (ex. clé d'API) ; jamais écrits dans les messages.
     ``clock_ms`` : horloge locale en epoch ms (défaut ``now_ms``, lue à chaque appel).
     Les messages d'erreur montrent l'URL **sans** ses paramètres (signature, horodatage).
     """
     target: str | urllib.request.Request = (
-        urllib.request.Request(url, headers=dict(headers)) if headers else url
+        urllib.request.Request(url, data=data, headers=dict(headers or {}))
+        if headers or data is not None
+        else url
     )
     open_url = opener or urllib.request.urlopen
     clock = clock_ms or now_ms

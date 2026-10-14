@@ -292,3 +292,49 @@ def markets_series(paths: DataPaths) -> None:
                 "volume": [1e6] * MARKETS_DAYS,
             }
         ).write_parquet(out)
+
+
+TRADING_T0 = date_to_ms("2020-01-06")  # lundi
+TRADING_HOURS = 120 * 24
+
+
+def trading_fiche(folder: Path, ident: str, lookbacks: list[int], horizons: list[int]) -> Path:
+    path = markets_fiche(folder, ident, lookbacks, horizons)
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    data.update(volet="trading", universe="fx_cfd", features=["close_1h"], horizon_s=3600)
+    data["parameters"] = [
+        {"name": "lookback_h", "values": lookbacks},
+        {"name": "horizon_h", "values": horizons},
+    ]
+    path.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    return path
+
+
+def trading_series(paths: DataPaths) -> None:
+    """Barres horaires échangées des 3 instruments de la config de test, week-ends retirés
+    (marché fermé) ; EURUSD onde, USDJPY tendance, S&P onde opposée ; spread 0,01 %."""
+    shapes = {
+        "EURUSD": lambda i: 1.1 * (1 + 0.01 * math.sin(i / 7)),
+        "USDJPY": lambda i: 110 * (1.00002**i),
+        "SPXUSD": lambda i: 3000 * (1 - 0.01 * math.sin(i / 7)),
+    }
+    hours = [
+        i
+        for i in range(TRADING_HOURS)
+        if ((TRADING_T0 + i * MS_PER_HOUR) // 86_400_000 + 3) % 7 < 5
+    ]
+    for name, shape in shapes.items():
+        closes = [shape(i) for i in hours]
+        out = paths.trading_hourly(name)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        pl.DataFrame(
+            {
+                "t_ms": [TRADING_T0 + i * MS_PER_HOUR for i in hours],
+                "open": closes,
+                "high": [c * 1.001 for c in closes],
+                "low": [c * 0.999 for c in closes],
+                "close": closes,
+                "spread_frac": [0.0001] * len(hours),
+                "volume": [10.0] * len(hours),
+            }
+        ).write_parquet(out)

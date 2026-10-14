@@ -1,0 +1,50 @@
+# Volet trading (docs/SPEC_TRADING.md) : positions de quelques heures sur des marchés à
+# coûts faibles (devises, indices, matières premières). Barres d'une minute de HistData
+# (gratuites), regroupées en barres horaires UTC. Recherche et paper uniquement.
+# Suffixes : _frac fraction du prix, _s secondes, _h heures, _bars barres horaires.
+
+page_url: https://www.histdata.com/download-free-forex-historical-data/?/ascii/1-minute-bar-quotes/
+download_url: https://www.histdata.com/get.php
+request_interval_s: 2.0
+start_year: 2010
+source_utc_offset_h: 5               # heure de New York SANS heure d'été (doc de la source)
+
+# Commission + glissement d'une jambe, barème d'un courtier à bas coût (futures / devises).
+classes:
+  - {name: devises, commission_frac: 0.00002, slippage_frac: 0.00002}
+  - {name: indices, commission_frac: 0.00002, slippage_frac: 0.00003}
+  - {name: matieres_premieres, commission_frac: 0.00003, slippage_frac: 0.00005}
+
+# spread_frac : spread complet supposé (la source ne donne pas le bid / ask), prudent, aux
+# heures liquides ; les heures de bascule sont exclues (excluded_hours_utc).
+instruments:
+  - {name: EURUSD, asset_class: devises, spread_frac: 0.00005, label: "Euro / dollar"}
+  - {name: GBPUSD, asset_class: devises, spread_frac: 0.00007, label: "Livre / dollar"}
+  - {name: USDJPY, asset_class: devises, spread_frac: 0.00006, label: "Dollar / yen"}
+  - {name: AUDUSD, asset_class: devises, spread_frac: 0.00008, label: "Dollar australien / dollar"}
+  - {name: USDCAD, asset_class: devises, spread_frac: 0.00008, label: "Dollar / dollar canadien"}
+  - {name: USDCHF, asset_class: devises, spread_frac: 0.00008, label: "Dollar / franc suisse"}
+  - {name: NZDUSD, asset_class: devises, spread_frac: 0.0001, label: "Dollar néo-zélandais / dollar"}
+  - {name: EURJPY, asset_class: devises, spread_frac: 0.0001, label: "Euro / yen"}
+  - {name: EURGBP, asset_class: devises, spread_frac: 0.0001, label: "Euro / livre"}
+  - {name: UDXUSD, asset_class: devises, spread_frac: 0.0001, label: "Indice dollar"}
+  - {name: SPXUSD, asset_class: indices, spread_frac: 0.00006, label: "S&P 500"}
+  - {name: NSXUSD, asset_class: indices, spread_frac: 0.0001, label: "Nasdaq 100"}
+  - {name: GRXEUR, asset_class: indices, spread_frac: 0.0001, label: "DAX"}
+  - {name: UKXGBP, asset_class: indices, spread_frac: 0.00015, label: "FTSE 100"}
+  - {name: FRXEUR, asset_class: indices, spread_frac: 0.00015, label: "CAC 40"}
+  - {name: ETXEUR, asset_class: indices, spread_frac: 0.0002, label: "Euro Stoxx 50"}
+  - {name: JPXJPY, asset_class: indices, spread_frac: 0.0002, label: "Nikkei 225"}
+  - {name: XAUUSD, asset_class: matieres_premieres, spread_frac: 0.0001, label: "Or"}
+  - {name: XAGUSD, asset_class: matieres_premieres, spread_frac: 0.0004, label: "Argent"}
+  - {name: WTIUSD, asset_class: matieres_premieres, spread_frac: 0.0003, label: "Pétrole WTI"}
+  - {name: BCOUSD, asset_class: matieres_premieres, spread_frac: 0.0003, label: "Pétrole Brent"}
+
+excluded_hours_utc: [21, 22]         # bascule quotidienne : spreads écartés, liquidité faible
+days_per_year: 365                   # barres horaires de toutes les heures (week-ends à plat)
+warmup_bars: 720                     # 30 jours de cotation avant d'être éligible
+vol_lookback_bars: 480               # volatilité des poids inverses : 20 jours
+n_long: 3
+n_short: 3
+holdout_start: "2024-10-01"
+max_trials: 60
