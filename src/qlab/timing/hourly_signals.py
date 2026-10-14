@@ -21,6 +21,7 @@ avant les tests) ; fenêtre de k barres. Les expressions s'évaluent sur un pane
 | ``delisting_short`` | −1 pendant k barres après une annonce de retrait (``event_book.py``) |
 | ``listing_long`` | +1 pendant k barres après une annonce de cotation |
 | ``pre_fomc`` | +1 sur le contrat de référence pendant les k h avant un communiqué du FOMC |
+| ``momentum_blend`` | moyenne des momentums sur k, k / 2 et k / 4 |
 | ``channel`` | position de close_t dans [min low, max high] des k h (canal de Donchian) − ½ |
 | ``seasonality`` | rendement moyen à l'horizon h, mêmes heures de la semaine, semaines passées |
 
@@ -50,6 +51,11 @@ def _per(expr: pl.Expr) -> pl.Expr:
 
 def _momentum(k: int) -> pl.Expr:
     return _per((pl.col("close") / pl.col("close").shift(k)).log())
+
+
+def _momentum_blend(k: int) -> pl.Expr:
+    """Moyenne des momentums sur k, k / 2 et k / 4 barres (12, 6 et 3 mois pour k = 252 j)."""
+    return (_momentum(k) + _momentum(max(1, k // 2)) + _momentum(max(1, k // 4))) / 3
 
 
 def _flow(k: int) -> pl.Expr:
@@ -116,6 +122,7 @@ _BY_LOOKBACK: dict[str, Callable[[int], pl.Expr]] = {
     "breakout": _breakout,
     "low_volatility": _low_volatility,
     "channel": _channel,
+    "momentum_blend": _momentum_blend,
     "delisting_short": _event("delisting", -1.0),
     "listing_long": _event("listing", 1.0),
     "pre_fomc": _pre_fomc,
@@ -127,6 +134,9 @@ ALIASES = {
     "reversal_band": "reversal",
     "seasonality_band": "seasonality",
     "trend_band": "momentum",
+    "rotation_blend": "momentum_blend",
+    "dual_momentum": "momentum",
+    "dual_blend": "momentum_blend",
 }
 NAMES = (*_BY_LOOKBACK, "seasonality", *ALIASES)
 

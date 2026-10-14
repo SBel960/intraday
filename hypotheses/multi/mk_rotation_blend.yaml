@@ -1,0 +1,29 @@
+id: mk_rotation_blend
+title: Rotation vers les marchés les plus forts, momentum mélangé 3, 6 et 12 mois
+volet: multi
+created: "2026-10-14"
+mechanism: >-
+  Vague 2. La rotation 12 mois (mk_momentum_long_only 252/21, Sharpe +0,61) est la piste la
+  plus proche d'être validée. Un seul horizon de mesure rend le choix fragile (dates de
+  retournement) ; la moyenne des momentums 3, 6 et 12 mois, classique chez les gérants de
+  tendance, lisse ce choix sans en ajouter un nouveau.
+horizon_s: 1814400
+universe: markets
+features: [close_1d]
+parameters:
+  - name: lookback_d
+    values: [252]
+  - name: horizon_d
+    values: [21]
+  - name: n_long
+    values: [5, 8]
+  - name: n_short
+    values: [0]
+cost_round_trip_frac: 0.0015
+min_edge_frac: 0.03
+edge_basis: per_year
+abandon: >-
+  Abandon si DSR < 0,95 sur les essais du volet multi, si l'écart de Sharpe avec le panier de
+  tous les marchés n'a pas un IC bootstrap à 95 % strictement positif, ou si le résultat ne
+  tient pas sur 3 années et sur les deux moitiés des marchés. Hold-out (depuis 2024-10-01) lu
+  une seule fois.

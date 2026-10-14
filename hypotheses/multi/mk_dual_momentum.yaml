@@ -1,0 +1,33 @@
+id: mk_dual_momentum
+title: Rotation 12 mois avec filtre absolu (un marché en baisse est remplacé par du cash)
+volet: multi
+created: "2026-10-14"
+mechanism: >-
+  Vague 2. « Dual momentum » (Antonacci) : en plus d'être parmi les plus forts, un marché doit
+  avoir monté sur 12 mois pour être acheté ; sinon sa place reste en cash. Dans les krachs
+  généralisés (2008, 2022), le portefeuille se vide au lieu de détenir les « moins mauvais ».
+  Poids inverses de la volatilité parmi les retenus, ou poids égaux avec cash (1/8 par place).
+horizon_s: 1814400
+universe: markets
+features: [close_1d]
+parameters:
+  - name: lookback_d
+    values: [252]
+  - name: horizon_d
+    values: [21]
+  - name: n_long
+    values: [8]
+  - name: n_short
+    values: [0]
+  - name: signed
+    values: [1]
+  - name: equal_weight
+    values: [0, 1]
+cost_round_trip_frac: 0.0015
+min_edge_frac: 0.03
+edge_basis: per_year
+abandon: >-
+  Abandon si DSR < 0,95 sur les essais du volet multi, si l'écart de Sharpe avec le panier de
+  tous les marchés n'a pas un IC bootstrap à 95 % strictement positif, ou si le résultat ne
+  tient pas sur 3 années et sur les deux moitiés des marchés. Hold-out (depuis 2024-10-01) lu
+  une seule fois.

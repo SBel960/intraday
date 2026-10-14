@@ -89,3 +89,11 @@ def test_band_cards_get_a_persistent_risk_budget_book() -> None:
         20,
     )
     assert st.is_band({"enter_z": 2}) and not st.is_band({"horizon_h": 1})
+
+
+def test_equal_weight_card_overrides_the_study_weighting() -> None:
+    study = st.Study(
+        **{**{f: getattr(_study(), f) for f in st.Study.__slots__}, "weighting": "inverse_vol"}
+    )
+    assert study.book({"horizon_h": 1}).weighting == "inverse_vol"
+    assert study.book({"horizon_h": 1, "equal_weight": 1}).weighting == "equal"

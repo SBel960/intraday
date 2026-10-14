@@ -316,6 +316,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 83 | 11 · Multi-actifs | `data/yahoo.py` | livré |
 | 84 | 11 · Multi-actifs | `markets/daily_panel.py` | livré |
 | 85 | 11 · Multi-actifs | `markets/multi_asset.py` + `hypotheses/multi/*.yaml` : 5 fiches, 23 essais, écrites avant tout test (+ volet `multi`, univers `markets`) | livré (figées) |
+| 86 | 11 · Multi-actifs | Vague 2 : signal `momentum_blend` (3, 6, 12 mois), option de fiche `equal_weight` (cash pour les places vides) ; 3 fiches (`mk_rotation_blend`, `mk_dual_momentum`, `mk_dual_blend`, 6 essais, N = 29) ; meilleur `mk_dual_momentum` poids égaux : Sharpe +0,69, DSR 0,76, rejeté | livré (figées) |
 
 **Phase 12 — Trading, décidée le 2026-10-14** (« c'est toujours pas du trading », option 1) : positions de quelques heures sur devises, indices, matières premières et taux, où un aller-retour coûte 10 à 30 fois moins qu'en crypto ; spécification : `docs/SPEC_TRADING.md`. Validation fichier par fichier levée pour cette recherche.
 

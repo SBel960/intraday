@@ -64,7 +64,14 @@ Un **panier qui achète tous les marchés éligibles, pondéré par l'inverse de
 | `mk_momentum_long_only` | les 8 plus forts achetés, sans vente | {126, 252} × {21} = 2 |
 | `mk_reversal` | retour à la moyenne d'une semaine entre marchés | {5} × {5} = 1 |
 
-Cela fait 23 essais ; budget `markets.max_trials` = 60. Le N est **propre au volet** : univers, données et fréquence sont différents du volet timing. Le rapport rappelle aussi les 105 essais du volet timing.
+Cela fait 23 essais ; budget `markets.max_trials` = 60.
+
+**Vague 2 (2026-10-14).** La rotation 12 mois (Sharpe +0,61) est la piste la plus proche d'être validée. Trois fiches la renforcent sans nouvel horizon :
+- **momentum mélangé** 3, 6 et 12 mois (`mk_rotation_blend`, 2 essais) ;
+- **filtre absolu** : un marché en baisse sur 12 mois est remplacé par du cash, en poids inverses de la volatilité ou en poids égaux (`mk_dual_momentum`, 2 essais) ;
+- **les deux ensemble** (`mk_dual_blend`, 2 essais).
+
+N = 29. Le N est **propre au volet** : univers, données et fréquence sont différents du volet timing. Le rapport rappelle aussi les 105 essais du volet timing.
 
 ## 7. Validation
 

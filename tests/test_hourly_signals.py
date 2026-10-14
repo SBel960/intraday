@@ -162,3 +162,10 @@ def test_bad_parameters() -> None:
         sg.compute(df, "magie", 1, 1)
     with pytest.raises(DataError, match="entière"):
         sg.compute(df, "momentum", 1.5, 1)
+
+
+def test_momentum_blend_by_hand() -> None:
+    """k = 4 : moyenne des momentums sur 4, 2 et 1 barres à la dernière barre."""
+    df = _panel([100, 110, 121, 100, 125])
+    expected = (math.log(125 / 100) + math.log(125 / 121) + math.log(125 / 100)) / 3
+    assert _values(df, "momentum_blend", 4)[4] == pytest.approx(expected)

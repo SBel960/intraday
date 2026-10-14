@@ -1,0 +1,31 @@
+id: mk_dual_blend
+title: Rotation au momentum mélangé avec filtre absolu (cash si en baisse)
+volet: multi
+created: "2026-10-14"
+mechanism: >-
+  Vague 2. Les deux améliorations précédentes ensemble : momentum moyen 3, 6 et 12 mois, et
+  filtre absolu (un marché dont ce momentum est négatif est remplacé par du cash).
+horizon_s: 1814400
+universe: markets
+features: [close_1d]
+parameters:
+  - name: lookback_d
+    values: [252]
+  - name: horizon_d
+    values: [21]
+  - name: n_long
+    values: [8]
+  - name: n_short
+    values: [0]
+  - name: signed
+    values: [1]
+  - name: equal_weight
+    values: [0, 1]
+cost_round_trip_frac: 0.0015
+min_edge_frac: 0.03
+edge_basis: per_year
+abandon: >-
+  Abandon si DSR < 0,95 sur les essais du volet multi, si l'écart de Sharpe avec le panier de
+  tous les marchés n'a pas un IC bootstrap à 95 % strictement positif, ou si le résultat ne
+  tient pas sur 3 années et sur les deux moitiés des marchés. Hold-out (depuis 2024-10-01) lu
+  une seule fois.
