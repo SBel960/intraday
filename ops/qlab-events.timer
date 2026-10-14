@@ -1,0 +1,11 @@
+# Toutes les minutes : une annonce est reçue au plus ~1 min après sa publication.
+[Unit]
+Description=qlab : relevé des annonces Binance chaque minute
+
+[Timer]
+OnCalendar=*:*:15
+AccuracySec=5s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,12 @@
+# Phase 9 : relevé des annonces Binance (horodatées à la réception, horloge contrôlée), puis
+# un passage du paper des annonces (aucun ordre). Lancé par qlab-events.timer.
+[Unit]
+Description=qlab : annonces Binance et paper des annonces
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/intraday
+ExecStart=%h/.venvs/qlab/bin/python -m qlab.events.news --config config poll
+ExecStart=%h/.venvs/qlab/bin/python -m qlab.live.paper_events --config config run

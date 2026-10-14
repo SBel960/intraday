@@ -137,9 +137,10 @@ intraday/
 │   │   ├── broker.py              interface d'ordres (Broker) ; PaperBroker = exécution du backtest (test d'identité) ; réel toujours refusé : liste ce qui manque (flag, clé trading spot seul sans retrait ni transfert, IP) puis « non écrite »
 │   │   ├── paper_book.py          une journée de paper sans réseau ni disque : valeur, garde-fous, décision, exécution à l'identique du backtest (test d'identité) ; état rebâti depuis le journal
 │   │   ├── paper.py               commande start / run (00:05 UTC : horloge contrôlée, archives + bougies REST, signal, paper_book.day, journal sous verrou) / status / resume
+│   │   ├── paper_events.py        paper en temps réel des annonces Binance (retrait ⇒ vente 72 h, cotation ⇒ achat 24 h), prix relus des bougies publiques, journal append-only
 │   │   └── paper_report.py        paper face au backtest (LT.6) : rendement sur N jours dans l'IC bootstrap des chemins de N jours du backtest ; fidélité des prix aux archives ; exploitation
 │   ├── events/                    phase 9 : informations hors marché (annonces, calendrier, actualité)
-│   │   ├── calendar.py            événements programmés (Fed, inflation US…) : fenêtres sans nouvelle position
+│   │   ├── calendar.py            communiqués du FOMC (réunions programmées, dates versionnées en config, heure de New York → UTC), contrôle face à la page de la Fed, fenêtres de risque
 │   │   ├── news.py                annonces Binance (cotations, retraits) : historique et relevé, horodatées à la RÉCEPTION (horloge contrôlée), RAW append-only dédoublonné
 │   │   └── classify.py            classement par règles versionnées sur le titre (retrait, retrait de paires, cotation, contrats) → table des événements à l'heure effective
 │   ├── timing/                    phase 10 : meilleur moment d'achat / vente (long et short à 1×) ; moteur commun aux barres horaires (perpétuels) et quotidiennes (multi-actifs)
@@ -279,11 +280,13 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | # | Phase | Fichier | Statut |
 |---|---|---|---|
 | 48 | 9 · Événements | `docs/SPEC_EVENEMENTS.md` (spécification, à valider avant le code) | validé (2026-10-14, réponses recommandées du §9 acceptées) |
-| 49 | 9 · Événements | `events/calendar.py` | à faire |
+| 49 | 9 · Événements | `events/calendar.py` (+ `fomc_*` dans `config/events.yaml` : 63 communiqués 2020 → 2027 relevés sur federalreserve.gov, contrôle `check`) ; CPI / NFP non faits (le site du BLS refuse les robots) | livré |
 | 50 | 9 · Événements | `events/news.py` (+ `config/events.yaml`, `EventsConfig`, `core/paths.py` : `events_news`) ; historique rechargé : 2 283 cotations, 441 retraits | livré |
 | 51 | 9 · Événements | `events/classify.py` (règles v1 sur le titre ; pas de modèle de langage) | livré |
 | 51 bis | 9 · Événements | `timing/event_book.py` + signaux `delisting_short` / `listing_long` + fiches `hypotheses/timing_events/` : **non lancées**, puissance insuffisante (24 retraits exploitables avant le hold-out au mieux, 30 exigés) | livré (fiches en attente) |
 | 51 ter | 9 · Événements | événements et drapeaux actifs dans le cockpit | à faire |
+| 51 quater | 9 · Événements | `live/paper_events.py` + `ops/qlab-events.{service,timer}` (relevé chaque minute + paper) ; `EventPaperConfig` | livré, en service depuis le 2026-10-14 |
+| 51 quinquies | 9 · Événements | `tm_pre_fomc` (`timing/event_book.with_fomc`, signal `pre_fomc`) : 2 essais, N = 107 ; rejeté (Sharpe +0,84 contre +1,08 pour BTC, t = 1,93) | livré (figée) |
 
 **Phase 10 — Timing (meilleur moment d'achat et de vente), décidée le 2026-10-14.** Long et short (perpétuels USDⓈ-M à 1×), horizon libre de 5 min à 72 h, recherche et paper uniquement ; spécification : `docs/SPEC_TIMING.md`.
 

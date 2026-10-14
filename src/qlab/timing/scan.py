@@ -3,7 +3,8 @@
 Prépare l'étude (``timing/study.py``) : panel horaire de tous les contrats déjà éligibles une
 fois (univers point-in-time), coûts taker mesurés par contrat, ``n_long`` / ``n_short`` de la
 config, poids égaux, référence = buy & hold du contrat ``timing.reference_symbol`` ; âges des
-annonces Binance (``timing/event_book.py``) pour les fiches d'événements. Fiches
+annonces Binance et heures jusqu'au prochain communiqué du FOMC (``timing/event_book.py``)
+pour les fiches d'événements. Fiches
 ``hypotheses/timing/tm_<signal>.yaml`` ; budget ``timing.max_trials``.
 
 Commande : ``python -m qlab.timing.scan --config config run [--only tm_x,tm_y]``
@@ -20,7 +21,7 @@ import polars as pl
 
 from qlab.core.cli import Context, run_command
 from qlab.core.timeutils import date_to_ms
-from qlab.events import classify
+from qlab.events import calendar, classify
 from qlab.events.news import stored
 from qlab.exchange import spreads
 from qlab.research.hypothesis import load_all
@@ -49,6 +50,9 @@ def prepare(ctx: Context) -> Study:
     panel = hs.with_reference(panel, cfg.reference_symbol)
     news = classify.events_table(stored(ctx.paths), ctx.config.events.latency_margin_s)
     panel = event_book.with_event_ages(panel, news, cfg.quote_asset)
+    ev = ctx.config.events
+    fomc = [calendar.statement_ms(d, ev.fomc_statement_time_et) for d in ev.fomc_statements]
+    panel = event_book.with_fomc(panel, fomc, cfg.reference_symbol)
     measured = spreads.medians(ctx.paths, cfg.spread_min_samples, market="um")
     symbols = panel["symbol"].unique().sort().to_list()
     leg = dict(slippage_frac=cfg.slippage_frac, fallback_spread_frac=cfg.fallback_spread_frac)

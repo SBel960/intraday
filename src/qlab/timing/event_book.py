@@ -13,6 +13,11 @@ position est ensuite tenue par un portefeuille persistant.
 
 Les signaux ``delisting_short`` / ``listing_long`` (``timing/hourly_signals.py``) valent −1 / +1
 pendant les ``k`` barres qui suivent la barre de signal, 0 sinon.
+
+Communiqués du FOMC (``events/calendar.py``, dates connues d'avance : aucune fuite) : la ligne
+du contrat de référence reçoit ``fomc_to`` = heures entre le début de la barre et le prochain
+communiqué (nulle ailleurs) ; ``pre_fomc`` achète ce contrat pendant les ``k`` heures qui
+précèdent le communiqué et sort à son heure.
 """
 
 from __future__ import annotations
@@ -59,3 +64,17 @@ def with_event_ages(panel: pl.DataFrame, events: pl.DataFrame, quote: str) -> pl
         )
         out = out.join(ages, on="_row", how="left")
     return out.sort("_row").drop("_row")
+
+
+def with_fomc(panel: pl.DataFrame, statements_ms: list[int], reference: str) -> pl.DataFrame:
+    """Ajoute ``fomc_to`` (heures jusqu'au prochain communiqué) sur les lignes de ``reference``."""
+    times = pl.DataFrame({"next_ms": sorted(statements_ms)}, schema={"next_ms": pl.Int64})
+    out = panel.with_row_index("_row")
+    ref = (
+        out.filter(pl.col("symbol") == reference)
+        .select("_row", "t_ms")
+        .sort("t_ms")
+        .join_asof(times, left_on="t_ms", right_on="next_ms", strategy="forward")
+        .select("_row", ((pl.col("next_ms") - pl.col("t_ms")) // MS_PER_HOUR).alias("fomc_to"))
+    )
+    return out.join(ref, on="_row", how="left").sort("_row").drop("_row")

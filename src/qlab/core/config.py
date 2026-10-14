@@ -822,6 +822,50 @@ class EventCatalog:
 
 
 @dataclass(frozen=True, slots=True)
+class EventRule:
+    """Trade du paper sur un type d'annonce : sens (−1 vente, +1 achat), durée de détention,
+    essai figé dont c'est la variante (``hypothesis`` + ``params``, pour la traçabilité)."""
+
+    kind: str
+    side: int
+    hold_h: int
+    hypothesis: str
+    params: str
+
+    def __post_init__(self) -> None:
+        _check(self.side in (-1, 1), f"{self.kind} : side −1 ou +1 attendu (reçu {self.side})")
+        _positive("hold_h", self.hold_h)
+
+
+@dataclass(frozen=True, slots=True)
+class EventPaperConfig:
+    """Paper en temps réel des annonces (``live/paper_events.py``) : annonces **reçues** après
+    ``start_date`` seulement ; contrat ``{actif}{quote}`` tradé s'il fait au moins
+    ``min_volume_quote`` sur 24 h ; au plus ``max_lines`` positions, chacune de
+    ``capital_quote / max_lines`` ; coût d'une jambe ``leg_cost_frac`` (frais taker, ½ spread,
+    glissement d'un petit contrat, prudent)."""
+
+    start_date: str
+    quote: str
+    min_volume_quote: float
+    max_lines: int
+    capital_quote: float
+    leg_cost_frac: float
+    rules: tuple[EventRule, ...]
+
+    def __post_init__(self) -> None:
+        _check(
+            bool(re.match(r"^\d{4}-\d{2}-\d{2}$", self.start_date)),
+            f"start_date : date AAAA-MM-JJ attendue (reçu {self.start_date!r})",
+        )
+        _non_negative("min_volume_quote", self.min_volume_quote)
+        _positive("max_lines", self.max_lines)
+        _positive("capital_quote", self.capital_quote)
+        _fraction("leg_cost_frac", self.leg_cost_frac)
+        _unique("rules.kind", [r.kind for r in self.rules])
+
+
+@dataclass(frozen=True, slots=True)
 class EventsConfig:
     """Phase 9 (``docs/SPEC_EVENEMENTS.md``) : annonces Binance horodatées à la réception.
 
@@ -829,7 +873,10 @@ class EventsConfig:
     ``catalogs`` : rubriques suivies ; ``page_size`` ; ``request_interval_s`` : pause entre deux
     pages ; ``latency_margin_s`` : en backtest, délai ajouté à l'heure de publication d'une
     annonce rechargée de l'historique (on n'a pas son heure de réception) ; ``exchange`` : place
-    dont l'horloge sert de référence (refus au-delà de son ``max_clock_offset_ms``)."""
+    dont l'horloge sert de référence (refus au-delà de son ``max_clock_offset_ms``) ;
+    ``paper`` : paper en temps réel des annonces ; ``fomc_*`` : calendrier des communiqués du
+    FOMC (``events/calendar.py``) — pages de la Fed, heure de New York du communiqué,
+    fenêtre de risque autour (minutes), jours des communiqués des réunions programmées."""
 
     list_url: str
     catalogs: tuple[EventCatalog, ...]
@@ -837,6 +884,13 @@ class EventsConfig:
     request_interval_s: float
     latency_margin_s: int
     exchange: str
+    paper: EventPaperConfig
+    fomc_page_url: str
+    fomc_history_url: str
+    fomc_statement_time_et: str
+    fomc_risk_before_min: int
+    fomc_risk_after_min: int
+    fomc_statements: tuple[str, ...]
 
     def __post_init__(self) -> None:
         _url("list_url", self.list_url, "https")
@@ -844,6 +898,20 @@ class EventsConfig:
         _positive("page_size", self.page_size)
         _non_negative("request_interval_s", self.request_interval_s)
         _non_negative("latency_margin_s", self.latency_margin_s)
+        _url("fomc_page_url", self.fomc_page_url, "https")
+        _check("{year}" in self.fomc_history_url, "fomc_history_url doit contenir {year}")
+        _check(
+            bool(re.match(r"^\d{2}:\d{2}$", self.fomc_statement_time_et)),
+            f"fomc_statement_time_et : HH:MM attendu (reçu {self.fomc_statement_time_et!r})",
+        )
+        _non_negative("fomc_risk_before_min", self.fomc_risk_before_min)
+        _non_negative("fomc_risk_after_min", self.fomc_risk_after_min)
+        for d in self.fomc_statements:
+            _check(bool(re.match(r"^\d{4}-\d{2}-\d{2}$", d)), f"fomc_statements : date {d!r}")
+        _check(
+            list(self.fomc_statements) == sorted(set(self.fomc_statements)),
+            "fomc_statements : dates strictement croissantes attendues",
+        )
 
 
 @dataclass(frozen=True, slots=True)

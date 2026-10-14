@@ -54,3 +54,15 @@ def test_ages_and_signals() -> None:
     sig = hs.compute(p, "delisting_short", 3, 1)
     assert sig.to_list()[:8] == [0, 0, -1, -1, -1, 0, 0, 0]
     assert hs.compute(p, "listing_long", 3, 1).to_list()[:8] == [0.0] * 8
+
+
+def test_fomc_hours_and_pre_fomc_signal() -> None:
+    """Communiqué à 06:00 : BTC reçoit ``fomc_to`` = 6, 5, … ; pre_fomc(2) achète aux barres
+    de signal 03:00 et 04:00 (à 3 et 2 h), donc tenu de 04:00 à 06:00, sortie au communiqué."""
+    p = _panel().with_columns(pl.col("symbol").replace("AUSDT", "BTCUSDT"))
+    got = eb.with_fomc(p, [T0 + 6 * H], "BTCUSDT")
+    btc = got.filter(pl.col("symbol") == "BTCUSDT")
+    assert btc["fomc_to"].to_list() == [6, 5, 4, 3, 2, 1, 0, None]
+    assert got.filter(pl.col("symbol") == "BUSDT")["fomc_to"].null_count() == 8
+    sig = hs.compute(got.with_columns(pl.lit(None).alias("delisting_age")), "pre_fomc", 2, 1)
+    assert sig.to_list()[:8] == [0, 0, 0, 1, 1, 0, 0, 0]

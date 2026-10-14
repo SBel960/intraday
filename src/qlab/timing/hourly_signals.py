@@ -20,6 +20,7 @@ avant les tests) ; fenêtre de k barres. Les expressions s'évaluent sur un pane
 | ``low_volatility`` | − écart-type des rendements log horaires sur k h |
 | ``delisting_short`` | −1 pendant k barres après une annonce de retrait (``event_book.py``) |
 | ``listing_long`` | +1 pendant k barres après une annonce de cotation |
+| ``pre_fomc`` | +1 sur le contrat de référence pendant les k h avant un communiqué du FOMC |
 | ``channel`` | position de close_t dans [min low, max high] des k h (canal de Donchian) − ½ |
 | ``seasonality`` | rendement moyen à l'horizon h, mêmes heures de la semaine, semaines passées |
 
@@ -97,6 +98,13 @@ def _event(kind: str, side: float) -> Callable[[int], pl.Expr]:
     return expr
 
 
+def _pre_fomc(k: int) -> pl.Expr:
+    """+1 du début de la barre ``S − k`` h à ``S`` (communiqué) : barres de signal à 2…k + 1 h
+    du communiqué, entrée à l'ouverture suivante (colonne ``fomc_to``, ``event_book.py``)."""
+    to = pl.col("fomc_to")
+    return pl.when((to >= 2) & (to <= k + 1)).then(1.0).otherwise(0.0)
+
+
 _BY_LOOKBACK: dict[str, Callable[[int], pl.Expr]] = {
     "momentum": _momentum,
     "reversal": lambda k: -_momentum(k),
@@ -110,6 +118,7 @@ _BY_LOOKBACK: dict[str, Callable[[int], pl.Expr]] = {
     "channel": _channel,
     "delisting_short": _event("delisting", -1.0),
     "listing_long": _event("listing", 1.0),
+    "pre_fomc": _pre_fomc,
 }
 ALIASES = {
     "trend": "momentum",

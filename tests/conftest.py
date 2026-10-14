@@ -199,6 +199,36 @@ EVENTS: dict[str, object] = {
     "request_interval_s": 0.0,
     "latency_margin_s": 300,
     "exchange": "binance",
+    "paper": {
+        "start_date": "2026-10-14",
+        "quote": "USDT",
+        "min_volume_quote": 1000000.0,
+        "max_lines": 2,
+        "capital_quote": 50.0,
+        "leg_cost_frac": 0.002,
+        "rules": [
+            {
+                "kind": "delisting",
+                "side": -1,
+                "hold_h": 3,
+                "hypothesis": "tm_delisting_short",
+                "params": "lookback_h=72",
+            },
+            {
+                "kind": "listing",
+                "side": 1,
+                "hold_h": 2,
+                "hypothesis": "tm_listing_long",
+                "params": "lookback_h=24",
+            },
+        ],
+    },
+    "fomc_page_url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+    "fomc_history_url": "https://www.federalreserve.gov/monetarypolicy/fomchistorical{year}.htm",
+    "fomc_statement_time_et": "14:00",
+    "fomc_risk_before_min": 30,
+    "fomc_risk_after_min": 120,
+    "fomc_statements": ["2020-01-29", "2020-07-29", "2024-03-20"],
 }
 
 

@@ -10,3 +10,90 @@ page_size: 50
 request_interval_s: 1.0
 latency_margin_s: 300                # backtest : publication + 5 min, puis heure pleine suivante
 exchange: binance                    # horloge de référence (max_clock_offset_ms de base.yaml)
+
+# Paper en temps réel (live/paper_events.py), décidé le 2026-10-14 AVANT toute annonce reçue :
+# une variante par fiche figée (hypotheses/timing_events), la médiane de sa grille.
+paper:
+  start_date: "2026-10-14"
+  quote: USDT
+  min_volume_quote: 1000000          # contrat perpétuel ≥ 1 M USDT échangés sur 24 h
+  max_lines: 3
+  capital_quote: 50                  # 3 lignes de ~16,7 USDT
+  leg_cost_frac: 0.002               # taker 0,05 % + ½ spread et glissement d'un petit contrat
+  rules:
+    - {kind: delisting, side: -1, hold_h: 72, hypothesis: tm_delisting_short, params: "lookback_h=72"}
+    - {kind: listing, side: 1, hold_h: 24, hypothesis: tm_listing_long, params: "lookback_h=24"}
+
+# Communiqués du FOMC (events/calendar.py) : réunions PROGRAMMÉES seulement, relevées le
+# 2026-10-14 sur federalreserve.gov (calendrier courant + page historique 2020). Les réunions
+# non programmées (mars 2020), annulées et les votes par écrit sont exclus. Contrôle :
+# python -m qlab.events.calendar --config config check (signale, ne corrige jamais).
+fomc_page_url: https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
+fomc_history_url: https://www.federalreserve.gov/monetarypolicy/fomchistorical{year}.htm
+fomc_statement_time_et: "14:00"     # heure de New York (heure d'été comprise)
+fomc_risk_before_min: 30           # aucune nouvelle position de 30 min avant…
+fomc_risk_after_min: 120           # …à 2 h après le communiqué
+fomc_statements:
+  - "2020-01-29"
+  - "2020-04-29"
+  - "2020-06-10"
+  - "2020-07-29"
+  - "2020-09-16"
+  - "2020-11-05"
+  - "2020-12-16"
+  - "2021-01-27"
+  - "2021-03-17"
+  - "2021-04-28"
+  - "2021-06-16"
+  - "2021-07-28"
+  - "2021-09-22"
+  - "2021-11-03"
+  - "2021-12-15"
+  - "2022-01-26"
+  - "2022-03-16"
+  - "2022-05-04"
+  - "2022-06-15"
+  - "2022-07-27"
+  - "2022-09-21"
+  - "2022-11-02"
+  - "2022-12-14"
+  - "2023-02-01"
+  - "2023-03-22"
+  - "2023-05-03"
+  - "2023-06-14"
+  - "2023-07-26"
+  - "2023-09-20"
+  - "2023-11-01"
+  - "2023-12-13"
+  - "2024-01-31"
+  - "2024-03-20"
+  - "2024-05-01"
+  - "2024-06-12"
+  - "2024-07-31"
+  - "2024-09-18"
+  - "2024-11-07"
+  - "2024-12-18"
+  - "2025-01-29"
+  - "2025-03-19"
+  - "2025-05-07"
+  - "2025-06-18"
+  - "2025-07-30"
+  - "2025-09-17"
+  - "2025-10-29"
+  - "2025-12-10"
+  - "2026-01-28"
+  - "2026-03-18"
+  - "2026-04-29"
+  - "2026-06-17"
+  - "2026-07-29"
+  - "2026-09-16"
+  - "2026-10-28"
+  - "2026-12-09"
+  - "2027-01-27"
+  - "2027-03-17"
+  - "2027-04-28"
+  - "2027-06-09"
+  - "2027-07-28"
+  - "2027-09-15"
+  - "2027-10-27"
+  - "2027-12-08"

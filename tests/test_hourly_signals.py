@@ -132,6 +132,7 @@ def test_causal_future_change_does_not_move_signal(name: str) -> None:
     base = _panel(closes, funding=[0.0001 * (i % 3) for i in range(n)]).with_columns(
         pl.lit(None, pl.Int64).alias("delisting_age"),  # causalité des annonces : test_event_book
         pl.lit(None, pl.Int64).alias("listing_age"),
+        pl.lit(None, pl.Int64).alias("fomc_to"),
     )
     cut = n - 5
     changed = base.with_columns(

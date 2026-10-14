@@ -20,8 +20,9 @@ ln -sf ~/intraday/ops/qlab-spreads.service ~/intraday/ops/qlab-spreads.timer ~/.
 ln -sf ~/intraday/ops/qlab-archives.service ~/intraday/ops/qlab-archives.timer ~/.config/systemd/user/
 ln -sf ~/intraday/ops/qlab-paper.service ~/intraday/ops/qlab-paper.timer ~/.config/systemd/user/
 ln -sf ~/intraday/ops/qlab-cockpit.service ~/.config/systemd/user/
+ln -sf ~/intraday/ops/qlab-events.service ~/intraday/ops/qlab-events.timer ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now qlab-exchange-info.timer qlab-spreads.timer qlab-archives.timer qlab-paper.timer qlab-cockpit.service
+systemctl --user enable --now qlab-exchange-info.timer qlab-spreads.timer qlab-archives.timer qlab-paper.timer qlab-events.timer qlab-cockpit.service
 ```
 
 ## Alertes téléphone (healthchecks.io)
