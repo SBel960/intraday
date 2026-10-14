@@ -9,6 +9,13 @@ plus faibles. Moins de candidats que de lignes ⇒ à plat.
 - Portefeuille **signé** (``Book.signed``) : un achat exige un signal > 0, une vente un signal
   < 0 ; tout le marché peut être acheté, vendu ou laissé, selon le signe, et le nombre de
   lignes peut manquer.
+- Portefeuille **persistant** (``Book.persistent``) : le signal est déjà une position tenue
+  (−1 / 0 / +1, ``timing/bands.py``) qui ne change que sur une barre tradable ; aucune
+  condition d'éligibilité ici, et la position traverse les barres fermées
+  (``forward_return(held=True)``) au lieu d'être fermée puis rouverte.
+- Poids **budget de risque** (``"risk_budget"``) : ∝ 1 / σ, divisés par la somme des 1 / σ de
+  **tous** les actifs candidats (à plat compris) : le poids d'une ligne ne bouge pas quand une
+  autre entre ou sort (exposition ≤ 1).
 - Poids **égaux** (``weighting="equal"``) : ``1 / (n_long + n_short)`` par ligne (exposition
   brute 1, une ligne manquante reste en cash). Poids **inverses de la volatilité**
   (``"inverse_vol"``) : ∝ 1 / σ, σ = écart-type des rendements log des ``vol_lookback``
@@ -53,8 +60,9 @@ class Book:
     costs: Mapping[str, float]
     default_cost: float
     signed: bool = False
-    weighting: Literal["equal", "inverse_vol"] = "equal"
+    weighting: Literal["equal", "inverse_vol", "risk_budget"] = "equal"
     vol_lookback: int = 60
+    persistent: bool = False
 
     def __post_init__(self) -> None:
         if self.horizon < 1 or self.n_long < 0 or self.n_short < 0 or self.vol_lookback < 2:
@@ -102,18 +110,18 @@ def weights(panel: pl.DataFrame, signal: pl.Series, book: Book) -> pl.DataFrame:
         "symbol",
         "eligible",
         signal.alias("s"),
-        forward_return(h).alias("r"),
+        forward_return(h, held=book.persistent).alias("r"),
         forward_funding(h).alias("f"),
         forward_peak(h).alias("peak"),
-        *([_volatility(book.vol_lookback).alias("vol")] if book.weighting == "inverse_vol" else []),
+        *([_volatility(book.vol_lookback).alias("vol")] if book.weighting != "equal" else []),
     ).filter(
         (pl.col("bar") % h == 0)
-        & pl.col("eligible")
+        & (pl.col("eligible") | book.persistent)
         & pl.col("s").is_not_null()
         & pl.col("s").is_finite()
         & pl.col("r").is_not_null()
     )
-    if book.weighting == "inverse_vol":
+    if book.weighting != "equal":
         cand = cand.filter(pl.col("vol") > 0)
     cand = cand.with_columns(
         pl.col("s").rank("ordinal", descending=True).over("bar").alias("top"),
@@ -126,9 +134,13 @@ def weights(panel: pl.DataFrame, signal: pl.Series, book: Book) -> pl.DataFrame:
     else:
         cand = cand.filter(pl.col("n") >= lines)
     side = pl.when(long_ok).then(1.0).when(short_ok).then(-1.0).otherwise(0.0)
+    risk = 1 / pl.col("vol")
+    if book.weighting == "risk_budget":  # budget fixé sur tous les candidats, à plat compris
+        cand = cand.with_columns((risk / risk.sum().over("bar")).alias("budget"))
     held = cand.with_columns(side.alias("side")).filter(pl.col("side") != 0)
-    if book.weighting == "inverse_vol":
-        risk = 1 / pl.col("vol")
+    if book.weighting == "risk_budget":
+        w = pl.col("side") * pl.col("budget")
+    elif book.weighting == "inverse_vol":
         w = pl.col("side") * risk / risk.sum().over("bar")
     else:
         w = pl.col("side") / lines

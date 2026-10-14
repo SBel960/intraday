@@ -78,3 +78,14 @@ def test_summary_row_by_hand(tmp_path: Path) -> None:
     assert row["cost_per_year"] == pytest.approx(1.0)
     assert row["invested"] == pytest.approx(2 / 3)
     assert (row["liquidations"], row["periods"], row["start"]) == (1, 3, "1970-01-01")
+
+
+def test_band_cards_get_a_persistent_risk_budget_book() -> None:
+    book = _study().book({"horizon_h": 1, "lookback_h": 1, "enter_z": 2, "exit_z": 0})
+    assert (book.persistent, book.signed, book.weighting, book.vol_lookback) == (
+        True,
+        True,
+        "risk_budget",
+        20,
+    )
+    assert st.is_band({"enter_z": 2}) and not st.is_band({"horizon_h": 1})

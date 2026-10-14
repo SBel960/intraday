@@ -96,7 +96,14 @@ _BY_LOOKBACK: dict[str, Callable[[int], pl.Expr]] = {
     "low_volatility": _low_volatility,
     "channel": _channel,
 }
-ALIASES = {"trend": "momentum", "momentum_slow": "momentum", "momentum_long_only": "momentum"}
+ALIASES = {
+    "trend": "momentum",
+    "momentum_slow": "momentum",
+    "momentum_long_only": "momentum",
+    "reversal_band": "reversal",
+    "seasonality_band": "seasonality",
+    "trend_band": "momentum",
+}
 NAMES = (*_BY_LOOKBACK, "seasonality", *ALIASES)
 
 

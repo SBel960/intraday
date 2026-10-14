@@ -150,14 +150,20 @@ def load(
     return assemble(bars, funding, universe)
 
 
-def forward_return(horizon: int) -> pl.Expr:
+def forward_return(horizon: int, *, held: bool = False) -> pl.Expr:
     """Rendement simple de l'ouverture de ``t + 1`` à la sortie, ``h`` barres plus tard (par
     contrat). Sortie : ouverture de ``t + 1 + h`` ; si elle manque (trou, retrait de la cote),
     dernière clôture connue à ``t + h``, puis dernière clôture du contrat : une position sur un
     contrat retiré est soldée à son dernier prix, jamais ignorée (biais du survivant). Les
     dernières barres d'un contrat encore coté en fin de données sont à exclure par l'appelant
-    (``in_sample``, ``complete_only``)."""
+    (``in_sample``, ``complete_only``).
+
+    ``held`` : position **déjà tenue** (portefeuille persistant) : si la barre suivante est
+    fermée, l'« entrée » est la dernière clôture connue — aucun trade, la position traverse la
+    fermeture et le rendement s'enchaîne d'une barre à l'autre sans trou."""
     entry = pl.col("open").shift(-1).over("symbol")
+    if held:
+        entry = pl.coalesce(entry, pl.col("close").forward_fill().over("symbol"))
     exit_ = pl.coalesce(
         pl.col("open").shift(-(1 + horizon)).over("symbol"),
         pl.col("close").forward_fill().shift(-horizon).over("symbol"),

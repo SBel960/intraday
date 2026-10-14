@@ -144,6 +144,7 @@ intraday/
 │   │   ├── panel.py               panel horaire de tous les contrats : grille complète (trous marqués), barre, financement par heure, univers liquide point-in-time, fenêtres à venir en barres (contrat retiré soldé au dernier prix)
 │   │   ├── hourly_signals.py      signaux horaires orientés et causaux (momentum, retour, flux acheteur, choc de volume, financement, rattrapage de BTC, cassure, canal de Donchian, faible volatilité, saisonnalité) ; alias des fiches qui changent seulement le portefeuille
 │   │   ├── portfolio.py           n_long meilleurs / n_short pires toutes les h barres (ou signé : selon le signe du signal), poids égaux ou inverses de la volatilité, levier 1× ; rendements nets (frais, ½ spread, glissement, financement) ; buy & hold et panier de référence
+│   │   ├── bands.py               bandes d'entrée et de sortie : signal mis à l'échelle de sa variabilité passée, hystérésis, état changé seulement sur une barre tradable
 │   │   ├── study.py               étude d'un volet (données, coûts, portefeuille, référence, hold-out) ; essais comptés, classement avant hold-out, rapport + JSON
 │   │   ├── scan.py                étude des perpétuels (univers point-in-time, spreads mesurés, référence BTC) et commande de balayage des fiches hypotheses/timing
 │   │   └── verdict.py             critères complets (DSR, écart de Sharpe vs référence, années, moitiés d'univers, MinTRL) des meilleurs ; hold-out rejoué une seule fois par volet
@@ -320,6 +321,7 @@ Réordonné le 2026-09-25 après l'estimation préliminaire du gate (section sui
 | 93 | 12 · Trading | `timing/portfolio.py` (½ spread de la barre), `timing/panel.py` (`carry_closed`, commun), `timing/verdict.py` (sous-commandes communes des volets) | livré |
 | 94 | 12 · Trading | `trading/fx_panel.py` | livré |
 | 95 | 12 · Trading | `trading/intraday_study.py` + `hypotheses/trading/*.yaml` : 5 fiches, 27 essais, écrites avant tout test (+ volet `trading`, univers `fx_cfd`) | livré (figées) |
+| 96 | 12 · Trading | Vague 2 : `timing/bands.py` (seuils d'entrée / sortie, hystérésis) ; `timing/portfolio.py` (portefeuille persistant à travers les barres fermées, poids « budget de risque ») ; `timing/panel.py` (`forward_return(held=True)`) ; 3 fiches à bandes (14 essais, N = 41) | livré (figées) |
 
 Écart au plan de la spec (§2, §3, §9) : les bougies **horaires** suffisent pour les horizons ≥ 1 h ; le gate v1 a déjà montré que ≤ 15 min ne passe pas en spot, et la grille des fiches commence à 1 h. Les bougies 1 min et le gate séparé ne sont faits que si un résultat le demande ; le coût est compté essai par essai (frais, spread mesuré, glissement, financement).
 

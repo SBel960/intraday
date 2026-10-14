@@ -76,12 +76,13 @@ def test_funding_breakout_low_volatility_by_hand() -> None:
 
 def test_channel_and_aliases_by_hand() -> None:
     """Canal sur 2 h : t1 [100, 110] clôture 110 ⇒ +½ ; t2 [110, 99] clôture 99 ⇒ −½ ;
-    t3 [99, 120] ⇒ +½. Range nul ⇒ pas de signal. ``trend`` = la formule du momentum."""
+    t3 [99, 120] ⇒ +½. Range nul ⇒ pas de signal. un alias calcule la formule de sa cible."""
     df = _panel([100, 110, 99, 120])
     assert _values(df, "channel")[1:] == pytest.approx([0.5, -0.5, 0.5])
     assert _values(_panel([1.0, 1.0]), "channel") == [None, None]
-    for alias in sg.ALIASES:
-        assert _values(df, alias) == _values(df, "momentum")
+    for alias, target in sg.ALIASES.items():
+        assert sg.resolve(alias) == target
+        assert _values(df, alias) == _values(df, target)
 
 
 def test_volume_shock_by_hand() -> None:
@@ -147,7 +148,7 @@ def test_causal_future_change_does_not_move_signal(name: str) -> None:
     horizon = 2
     a = _values(base, name, 3, horizon)
     b = _values(changed, name, 3, horizon)
-    limit = cut + 1 - (horizon + 1 if name == "seasonality" else 0)
+    limit = cut + 1 - (horizon + 1 if sg.resolve(name) == "seasonality" else 0)
     assert a[:limit] == b[:limit]
 
 

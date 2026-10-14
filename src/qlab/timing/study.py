@@ -1,12 +1,16 @@
 """Étude d'un volet « meilleur moment d'achat / vente » : données, règles et balayage des fiches.
 
-Commun aux perpétuels Binance (``timing/scan.py``, barres horaires) et aux marchés
-multi-actifs (``markets/multi_asset.py``, jours ouvrés). Une fiche ``<préfixe>_<signal>`` essaie le
-signal ``<signal>`` (``timing/hourly_signals.py``) avec ses paramètres ``lookback_<u>`` et
-``horizon_<u>`` (``u`` : unité de la barre, ``h`` ou ``d``) ; ``n_long``, ``n_short`` et
-``signed`` (0 / 1) de la fiche remplacent ceux de l'étude. Chaque essai est compté dans le
-registre (N du DSR du volet) et classé sur la période **avant** le hold-out ; le budget est
-vérifié avant de lancer quoi que ce soit.
+Commun aux perpétuels Binance (``timing/scan.py``, barres horaires), aux marchés multi-actifs
+(``markets/multi_asset.py``, jours ouvrés) et au trading (``trading/intraday_study.py``).
+
+Une fiche ``<préfixe>_<signal>`` essaie le signal ``<signal>`` (``timing/hourly_signals.py``)
+avec ses paramètres ``lookback_<u>`` et ``horizon_<u>`` (``u`` : unité de la barre, ``h`` ou
+``d``) ; ``n_long``, ``n_short`` et ``signed`` (0 / 1) de la fiche remplacent ceux de l'étude.
+Une fiche à **bandes** déclare ``enter_z`` et ``exit_z`` : le signal devient une position
+tenue (``timing/bands.py``, échelle sur ``vol_lookback`` barres) et le portefeuille est
+signé, persistant, en budget de risque. Chaque essai est compté dans le registre (N du DSR du
+volet) et classé sur la période **avant** le hold-out ; le budget est vérifié avant de lancer
+quoi que ce soit.
 
 Sorties : ``reports/{volet}_scan_{date}.md`` (classement) et ``{volet}_scan_latest.json``
 (cockpit, verdicts : ``timing/verdict.py``).
@@ -30,9 +34,15 @@ from qlab.core.timeutils import date_str, now_ms
 from qlab.longterm.lt_evaluate import trial_result
 from qlab.research.hypothesis import Hypothesis
 from qlab.research.trials import TrialRegistry
+from qlab.timing import bands
 from qlab.timing import hourly_signals as hs
 from qlab.timing import panel as pn
 from qlab.timing.portfolio import Book, period_returns
+
+
+def is_band(params: Mapping[str, float]) -> bool:
+    """Fiche à bandes : seuils d'entrée et de sortie déclarés."""
+    return "enter_z" in params
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +61,7 @@ class Study:
     default_cost: float
     n_long: int
     n_short: int
-    weighting: Literal["equal", "inverse_vol"]
+    weighting: Literal["equal", "inverse_vol", "risk_budget"]
     vol_lookback: int
     holdout_bar: int
     bars_per_year: int
@@ -65,7 +75,21 @@ class Study:
 
     def book(self, params: Mapping[str, float]) -> Book:
         """Portefeuille d'un essai : horizon de la fiche ; ``n_long``, ``n_short`` et ``signed``
-        pris dans ses paramètres s'ils y sont, sinon dans l'étude."""
+        pris dans ses paramètres s'ils y sont, sinon dans l'étude ; fiche à bandes : toutes
+        les positions de la bande, tenues, en budget de risque."""
+        if is_band(params):
+            n = self.panel["symbol"].n_unique() if not self.panel.is_empty() else 1
+            return Book(
+                self.horizon(params),
+                n,
+                n,
+                self.costs,
+                self.default_cost,
+                signed=True,
+                weighting="risk_budget",
+                vol_lookback=self.vol_lookback,
+                persistent=True,
+            )
         return Book(
             self.horizon(params),
             int(params.get("n_long", self.n_long)),
@@ -108,6 +132,9 @@ def returns_on(
     """Rendements par période de l'essai sur ``panel`` (toute la période) ; ``signal`` : déjà
     calculé sur ce panel (le même signal sert à plusieurs horizons)."""
     sig = study.signal(panel, hypothesis, params) if signal is None else signal
+    if is_band(params):
+        enter, exit_ = params["enter_z"], params["exit_z"]
+        sig = bands.band_signal(panel, sig, enter, exit_, study.vol_lookback)
     return period_returns(panel, sig, study.book(params))
 
 

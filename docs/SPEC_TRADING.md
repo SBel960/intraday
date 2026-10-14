@@ -53,6 +53,16 @@ En réel, ce serait des futures ou du change au comptant chez un courtier à bas
 
 Cela fait 27 essais ; budget `trading.max_trials` = 60.
 
+**Vague 2 (2026-10-14), après la vague 1.** Le retour à la moyenne et la saisonnalité horaires ont un Sharpe brut de +2, mais ils retournent tout le portefeuille chaque heure. Trois fiches à **bandes** (`timing/bands.py`) testent si les seuls signaux forts gardent l'avantage avec beaucoup moins de rotation : on entre au-delà de `enter_z` écarts-types du signal et on tient jusqu'à `exit_z`. La position traverse les heures fermées (pas de fermeture forcée), et le poids de chaque ligne est fixé par un budget de risque.
+
+| Fiche | Essais |
+|---|---|
+| `tr_reversal_band` | lookback {1, 4} × entrée {2, 3} × sortie {0, 1} = 8 |
+| `tr_seasonality_band` | entrée {2, 3} × sortie {0, 1} = 4 |
+| `tr_trend_band` | lookback {24, 120}, entrée 2, sortie 0 = 2 |
+
+N = 41.
+
 ## 6. Fichiers
 
 | Fichier | Rôle |

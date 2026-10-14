@@ -239,3 +239,52 @@ def test_loss_capped_at_the_stake_without_peak_data() -> None:
     sig = pl.Series([1.0, None, None])
     w = pf.weights(df, sig, pf.Book(1, 0, 1, {}, 0.0))
     assert w["pnl"].to_list() == pytest.approx([-1.0])
+
+
+def _bars(prices: dict[str, list[float | None]]) -> pl.DataFrame:
+    """Panel minimal : ouverture = prix (nulle = barre fermée), clôture reportée."""
+    rows = []
+    for sym, values in prices.items():
+        last = None
+        for i, v in enumerate(values):
+            last = v if v is not None else last
+            rows.append(
+                {
+                    "symbol": sym,
+                    "t_ms": T0 + i * H,
+                    "bar": (T0 + i * H) // H,
+                    "open": v,
+                    "high": last,
+                    "close": last,
+                    "funding": 0.0,
+                    "eligible": v is not None,
+                }
+            )
+    return pl.DataFrame(rows)
+
+
+def test_persistent_book_crosses_closed_bars_without_fees() -> None:
+    """A tenu de bout en bout, barre 2 fermée : un seul coût d'entrée, aucune rotation autour
+    de la fermeture ; les rendements s'enchaînent 100 → 100 → 110 → 121 sans trou."""
+    df = _bars({"A": [100.0, 100, None, 110, 121, 121]})
+    book = pf.Book(1, 1, 1, {"A": 0.001}, 0.0, signed=True, persistent=True)
+    out = pf.period_returns(df, pl.Series([1.0] * 6), book)
+    assert out["turnover"].to_list()[:4] == [0.5, 0.0, 0.0, 0.0]
+    gross = out["gross"].to_list()
+    # poids ½ (une ligne sur n_long + n_short = 2), remis à ½ à chaque barre : 1,05 × 1,05
+    assert (1 + gross[0]) * (1 + gross[1]) * (1 + gross[2]) * (1 + gross[3]) == pytest.approx(
+        1.05 * 1.05
+    )
+
+
+def test_risk_budget_weight_ignores_other_entries() -> None:
+    """A et B oscillent pareil (même volatilité) ; B n'entre qu'à la barre 4 : le poids de A
+    reste ½ (budget fixé sur tous les candidats, à plat compris)."""
+    wave = [100.0, 102, 100, 102, 100, 102, 100, 102]
+    df = _bars({"A": wave, "B": wave})
+    state = pl.Series([1.0] * 8 + [0.0] * 4 + [1.0] * 4)
+    book = pf.Book(
+        1, 2, 2, {}, 0.0, signed=True, weighting="risk_budget", vol_lookback=2, persistent=True
+    )
+    a = pf.weights(df, state, book).filter(pl.col("symbol") == "A")
+    assert a["w"].to_list() == pytest.approx([0.5] * a.height)
